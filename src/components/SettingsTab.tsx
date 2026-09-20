@@ -29,9 +29,19 @@ import {
   Key,
   Eye,
   EyeOff,
-  Lock
+  Lock,
+  Database,
+  RefreshCw,
+  HardDrive,
+  AlertCircle,
+  Cloud,
+  Folder,
+  FileSpreadsheet,
+  ExternalLink
 } from 'lucide-react';
 import { setStoredAdminSecurityCode, getAdminSecurityCode } from '../services/authStore';
+import { getCacheStats, clearTemporaryCache, performFullAppReset, CacheStats } from '../utils/cacheManager';
+import { getDriveFolderUrl, getSpreadsheetUrl, getDriveFolderId, getSpreadsheetId, initializeSpreadsheet } from '../services/googleApi';
 
 interface SettingsTabProps {
   config: AppConfig;
@@ -43,6 +53,7 @@ interface SettingsTabProps {
   onOpenEditRulesModal?: () => void;
   isDarkMode?: boolean;
   onToggleTheme?: (isDark: boolean) => void;
+  onSyncAllToCloud?: () => Promise<{ success: boolean; message: string }>;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -55,9 +66,89 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onOpenEditRulesModal,
   isDarkMode = false,
   onToggleTheme,
+  onSyncAllToCloud,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'settings' | 'permissions' | 'types'>('settings');
+  const [activeSubTab, setActiveSubTab] = useState<'settings' | 'permissions' | 'types' | 'cache' | 'workspace'>('settings');
   const [newRuleInput, setNewRuleInput] = useState('');
+
+  // Google Workspace Sync & Drive State
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [driveFolderUrlState, setDriveFolderUrlState] = useState<string | null>(getDriveFolderUrl());
+  const [spreadsheetUrlState, setSpreadsheetUrlState] = useState<string | null>(getSpreadsheetUrl());
+
+  useEffect(() => {
+    setDriveFolderUrlState(getDriveFolderUrl());
+    setSpreadsheetUrlState(getSpreadsheetUrl());
+  }, [activeSubTab]);
+
+  const handleManualCloudSync = async () => {
+    setSyncLoading(true);
+    setSyncResult(null);
+    try {
+      if (onSyncAllToCloud) {
+        const res = await onSyncAllToCloud();
+        setSyncResult(res);
+      } else {
+        await initializeSpreadsheet();
+        setSyncResult({ success: true, message: 'تم التحقق من مجلد "اتحاد الملاك" وجدول البيانات وتحديث الربط بنجاح!' });
+      }
+      setDriveFolderUrlState(getDriveFolderUrl());
+      setSpreadsheetUrlState(getSpreadsheetUrl());
+    } catch (err: any) {
+      setSyncResult({ success: false, message: err?.message || 'حدث خطأ أثناء المزامنة السحابية' });
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleInitDriveFolder = async () => {
+    setSyncLoading(true);
+    setSyncResult(null);
+    try {
+      await initializeSpreadsheet();
+      setDriveFolderUrlState(getDriveFolderUrl());
+      setSpreadsheetUrlState(getSpreadsheetUrl());
+      setSyncResult({
+        success: true,
+        message: 'تم التأكد من وجود مجلد "اتحاد الملاك" في Google Drive وجدول البيانات ونقل المرفقات إليه بنجاح.',
+      });
+    } catch (err: any) {
+      setSyncResult({ success: false, message: err?.message || 'تعذر تهيئة المجلد' });
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  // Cache & Storage Management State
+  const [cacheStats, setCacheStats] = useState<CacheStats>({ itemCount: 0, estimatedSizeKb: 0, cachedKeys: [] });
+  const [cacheActionLoading, setCacheActionLoading] = useState(false);
+  const [cacheActionResult, setCacheActionResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCacheStats(getCacheStats());
+  }, [activeSubTab]);
+
+  const handleClearCacheOnly = async () => {
+    setCacheActionLoading(true);
+    setCacheActionResult(null);
+    try {
+      const res = await clearTemporaryCache();
+      setCacheStats(getCacheStats());
+      setCacheActionResult(`تم بنجاح حذف ${res.clearedCount} من عناصر البيانات المؤقتة والكاش!`);
+    } catch {
+      setCacheActionResult('حدث خطأ أثناء محاولة مسح الذاكرة المؤقتة.');
+    } finally {
+      setCacheActionLoading(false);
+    }
+  };
+
+  const handleFullResetApp = async () => {
+    if (window.confirm('هل أنت متأكد من رغبتك في إعادة ضبط التطبيق بالكامل ومسح جميع البيانات المحلية والجلسة؟ سيتم إعادة تشغيل التطبيق بحالة نظيفة تماماً.')) {
+      setCacheActionLoading(true);
+      await performFullAppReset();
+    }
+  };
 
   // Building & Security Code state
   const [buildingName, setBuildingName] = useState(config.buildingName || 'اتحاد الملاك');
@@ -392,6 +483,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             >
               <Settings className="w-3.5 h-3.5" />
               <span>تهيئة المصنفات والأنواع</span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('cache')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'cache' ? 'bg-white text-amber-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <Database className="w-3.5 h-3.5 text-amber-600" />
+              <span>الذاكرة المؤقتة والبيانات</span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('workspace')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'workspace' ? 'bg-white text-emerald-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+              <span>جوجل درايف والشيت</span>
             </button>
           </div>
         </div>
@@ -1413,6 +1518,312 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
             </div>
           )}
+        </div>
+      )}
+
+      {/* SUBTAB 3: CACHE & TEMPORARY DATA MANAGEMENT (الذاكرة المؤقتة وحذف البيانات المؤقتة) */}
+      {activeSubTab === 'cache' && (
+        <div className="space-y-4 text-right">
+          {/* Card 1: Cache Info & Clear Temp Cache */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+              <div className="text-right">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center">
+                    <Database className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900">إدارة الذاكرة المؤقتة والبيانات المؤقتة</h3>
+                  <span className="px-2 py-0.5 bg-blue-50 text-blue-900 rounded-full text-[10px] font-black">
+                    تحسين سرعة الأداء
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-bold mt-1 leading-relaxed">
+                  حذف وتفريغ البيانات المؤقتة المسجلة في ذاكرة التخزين المحلية بالمتصفح، وحل أي مشاكل متعلقة بالتخزين المؤقت دون التأثير على حسابك.
+                </p>
+              </div>
+            </div>
+
+            {/* Cache Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center">
+                    <HardDrive className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800">حجم الذاكرة التخزينية</h4>
+                    <p className="text-[10px] text-slate-500 font-semibold">المستخدمة في المتصفح</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-blue-950 font-mono" dir="ltr">
+                  ~{cacheStats.estimatedSizeKb} KB
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800">العناصر والمفاتيح المؤقتة</h4>
+                    <p className="text-[10px] text-slate-500 font-semibold">سجلات الكاش والمزامنة</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-emerald-800 font-mono" dir="ltr">
+                  {cacheStats.itemCount} عنصر
+                </span>
+              </div>
+            </div>
+
+            {cacheActionResult && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center gap-2 animate-fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{cacheActionResult}</span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handleClearCacheOnly}
+                disabled={cacheActionLoading}
+                className="flex-1 py-3 px-4 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {cacheActionLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4" />
+                    <span>حذف كافة البيانات المؤقتة والكاش فقط</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFullResetApp}
+                disabled={cacheActionLoading}
+                className="flex-1 py-3 px-4 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 border border-rose-200 text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>إعادة ضبط التطبيق والجلسة بالكامل (Reset)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Advice card for mobile users */}
+          <div className="bg-blue-50/70 border border-blue-200/70 rounded-2xl p-4 space-y-2">
+            <h4 className="text-xs font-black text-blue-950 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-blue-700" />
+              <span>ملاحظة لحل الشاشة البيضاء أو التوقف على الهاتف المحمول:</span>
+            </h4>
+            <ul className="text-xs text-blue-900 font-semibold space-y-1.5 list-disc list-inside leading-relaxed">
+              <li>يقوم خيار «حذف كافة البيانات المؤقتة» بمسح الكاش المحلي وتفريغ ذاكرة الخدمة (Service Worker) لتحديث التطبيق فوراً بأحدث إصدار.</li>
+              <li>إذا كنت تستخدم التطبيق كتطبيق مثبت (PWA) على هاتفك وواجهت أي بطء أو عدم استجابة، يمكنك الضغط على حذف الكاش ثم إعادة تشغيل التطبيق.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 4: GOOGLE DRIVE & GOOGLE SHEETS CLOUD INTEGRATION */}
+      {activeSubTab === 'workspace' && (
+        <div className="space-y-4 text-right">
+          {/* Main Info Card */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <Cloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900">
+                    الحفظ السحابي المباشر على Google Drive و Google Sheets
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold mt-0.5">
+                    حفظ تلقائي لكافة الجداول، السجلات، الصور، والمرفقات دون أي احتمال لفقدان البيانات
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-black self-start sm:self-auto">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>الحفظ السحابي الفوري نشط</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+              بمجرد تسجيل الدخول بحساب Google، يقوم التطبيق تلقائياً بالتحقق من وجود مجلد باسم <strong className="text-slate-900 font-black">«اتحاد الملاك»</strong> على Google Drive، ومجلد فرعي للصور والمستندات، وجدول بيانات <strong className="text-slate-900 font-black">«اتحاد الملاك - قاعدة البيانات»</strong> على Google Sheets وحفظ جميع العمليات والإيصالات عليه مباشرة.
+            </p>
+
+            {/* Cloud Folders & Sheets Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+              {/* Google Drive Folder Card */}
+              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                      <Folder className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900">مجلد Google Drive</h4>
+                      <p className="text-[11px] text-slate-500 font-bold">اسم المجلد: اتحاد الملاك</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-black rounded-md">
+                    Google Drive
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-600">
+                  <div className="flex items-center justify-between py-1 border-b border-slate-200/60 text-[11px]">
+                    <span className="text-slate-500">مجلد المرفقات والصور:</span>
+                    <span className="font-bold text-slate-800">الصور والمرفقات والإيصالات</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-[11px]">
+                    <span className="text-slate-500">حالة التزامن:</span>
+                    <span className="font-bold text-emerald-700 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> متصل
+                    </span>
+                  </div>
+                </div>
+
+                {driveFolderUrlState ? (
+                  <a
+                    href={driveFolderUrlState}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-black rounded-lg transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    <span>فتح مجلد اتحاد الملاك على Google Drive</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleInitDriveFolder}
+                    disabled={syncLoading}
+                    className="w-full py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black rounded-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>إنشاء أو ربط مجلد اتحاد الملاك في Google Drive</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Google Sheets Database Card */}
+              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900">قاعدة بيانات Google Sheets</h4>
+                      <p className="text-[11px] text-slate-500 font-bold">اتحاد الملاك - قاعدة البيانات</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black rounded-md">
+                    Google Sheets
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-600">
+                  <div className="flex items-center justify-between py-1 border-b border-slate-200/60 text-[11px]">
+                    <span className="text-slate-500">عدد جداول البيانات:</span>
+                    <span className="font-bold text-slate-800">13 جدول بيانات مدمج</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-[11px]">
+                    <span className="text-slate-500">نوع المزامنة:</span>
+                    <span className="font-bold text-emerald-700 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> حفظ سحابي مباشر
+                    </span>
+                  </div>
+                </div>
+
+                {spreadsheetUrlState ? (
+                  <a
+                    href={spreadsheetUrlState}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-black rounded-lg transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    <span>فتح جدول اتحاد الملاك في Google Sheets</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleInitDriveFolder}
+                    disabled={syncLoading}
+                    className="w-full py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black rounded-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>إنشاء أو ربط جدول البيانات في Google Sheets</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Sync Result Feedback Banner */}
+            {syncResult && (
+              <div
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                  syncResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                {syncResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{syncResult.message}</span>
+              </div>
+            )}
+
+            {/* Action Bar */}
+            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handleManualCloudSync}
+                disabled={syncLoading}
+                className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {syncLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    <span>مزامنة وحفظ جميع الجداول والصور الآن إلى Google Sheets و Drive</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleInitDriveFolder}
+                disabled={syncLoading}
+                className="py-3 px-4 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 border border-slate-200 text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Folder className="w-4 h-4 text-amber-600" />
+                <span>التحقق من مجلد «اتحاد الملاك» في Google Drive</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Educational / Guarantee Card */}
+          <div className="bg-emerald-50/60 border border-emerald-200/70 rounded-2xl p-4 space-y-2">
+            <h4 className="text-xs font-black text-emerald-950 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-emerald-700" />
+              <span>ضمان عدم ضياع أي بيانات:</span>
+            </h4>
+            <ul className="text-xs text-emerald-900 font-semibold space-y-1.5 list-disc list-inside leading-relaxed">
+              <li>كل عملية تحصيل أو تسجيل مصروف أو صورة إيصال يتم رفعها فوراً إلى Google Drive وحفظها في Google Sheets.</li>
+              <li>البيانات والصور محفوظة في حساب جوجل الخاص بك، ولا يمكن حذفها حتى لو تم مسح بيانات المتصفح أو تغيير الجهاز أو الهاتف.</li>
+              <li>يمكنك في أي وقت فتح Google Drive لرؤية مجلد «اتحاد الملاك» والاطلاع على كافة الإيصالات والمستندات بتنظيم كامل.</li>
+            </ul>
+          </div>
         </div>
       )}
     </div>

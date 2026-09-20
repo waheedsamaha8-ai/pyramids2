@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig(() => {
   return {
-    base: './',
+    base: '/',
     plugins: [
       react(), 
       tailwindcss(),
@@ -18,15 +18,15 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
-          id: './',
+          id: '/',
           name: 'اتحاد الملاك',
           short_name: 'اتحاد الملاك',
           description: 'نظام ذكي متكامل لإدارة شؤون وماليات اتحاد الملاك.',
           theme_color: '#1e3a8a',
           background_color: '#f8fafc',
           display: 'standalone',
-          start_url: './',
-          scope: './',
+          start_url: '/',
+          scope: '/',
           dir: 'rtl',
           lang: 'ar',
           icons: [

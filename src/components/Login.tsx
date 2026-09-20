@@ -27,8 +27,11 @@ import {
   Home,
   Wrench,
   Smartphone,
-  Download
+  Download,
+  Database,
+  RefreshCw
 } from 'lucide-react';
+import { clearTemporaryCache } from '../utils/cacheManager';
 
 interface LoginProps {
   onLoginSuccess: (user: any, token: string) => void;
@@ -286,7 +289,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         // 1. Is President / Admin?
         const currentAdmins = getLocalAdmins();
         const isAdminMatch = currentAdmins.some((a: any) => a.email.toLowerCase().trim() === email);
-        if (isAdminMatch || email === 'admin@altaqwa.com') {
+        if (isAdminMatch || email === 'admin@altaqwa.com' || email === 'waheedsamaha8@gmail.com') {
           (user as any).role = 'ADMIN';
           localStorage.setItem('custom_user_session', JSON.stringify({ ...user, role: 'ADMIN' }));
           onLoginSuccess(user, accessToken);
@@ -1190,14 +1193,27 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col items-center gap-1">
+        {/* Footer & Cache helper */}
+        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col items-center gap-2">
           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-            مع تحيات مجلس إدارة اتحاد ملاك {buildingNameInput || 'عمارة التقوى'}
+            مع تحيات مجلس إدارة {buildingNameInput || 'اتحاد الملاك'}
           </span>
           <span className="text-[10px] text-slate-400 font-medium">
             رئيس الاتحاد: {adminName || 'محمد احمد'}
           </span>
+
+          <button
+            type="button"
+            onClick={async () => {
+              await clearTemporaryCache();
+              window.location.reload();
+            }}
+            className="mt-1 text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-bold flex items-center gap-1 transition cursor-pointer p-1 rounded-md"
+            title="تفريغ الكاش وحل مشاكل العرض والتجميد"
+          >
+            <Database className="w-3 h-3" />
+            <span>مسح البيانات المؤقتة والكاش وإعادة التحميل</span>
+          </button>
         </div>
       </div>
     </div>

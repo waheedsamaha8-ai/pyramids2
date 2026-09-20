@@ -64,6 +64,7 @@ import {
 import { initAuth, logoutUser } from './services/firebaseConfig';
 import * as googleApi from './services/googleApi';
 import * as offlineSync from './services/offlineSync';
+import { clearTemporaryCache } from './utils/cacheManager';
 import { UserRole, Resident, Payment, Expense, AppNotification, BuildingRules, AppConfig, MaintenanceRequest, Poll, AdminDecision, BuildingEvent, ChatMessage, PublicComplaint, ComplaintComment, FloorConfig, Craftsman, CraftsmanComment } from './types';
 
 // Importing Custom Components
@@ -1758,6 +1759,38 @@ export default function App() {
     }
   };
 
+  // Full direct sync of all data tables and cloud resources to Google Sheets and Drive
+  const handleSyncAllToCloud = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      setSyncing(true);
+      setSyncStatusText('جاري مزامنة كافة الجداول وقواعد البيانات إلى Google Sheets...');
+      await googleApi.initializeSpreadsheet();
+      const res = await googleApi.syncAllLocalDataToGoogleSheets({
+        residents,
+        payments,
+        expenses,
+        rules,
+        config,
+        craftsmen,
+        messages,
+        decisions,
+        polls,
+        complaints,
+        maintenanceRequests,
+        events,
+      });
+      addNotification('حفظ ومزامنة السحابي', res.message, 'success', 'services');
+      return res;
+    } catch (err: any) {
+      const msg = err?.message || 'تعذر إتمام المزامنة مع Google Sheets و Drive';
+      addNotification('خطأ في المزامنة', msg, 'error', 'services');
+      return { success: false, message: msg };
+    } finally {
+      setSyncing(false);
+      setSyncStatusText('');
+    }
+  };
+
   // Chat room and complaints board handlers
   const handleSendChatMessage = (text: string, imageUrl?: string) => {
     const newMsg: ChatMessage = {
@@ -2274,9 +2307,19 @@ export default function App() {
           <div className="pt-2 flex flex-col gap-2">
             <button
               onClick={() => setIsInitializingAuth(false)}
-              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
             >
               متابعة الدخول للوحة التحكم فوراً
+            </button>
+            <button
+              onClick={async () => {
+                await clearTemporaryCache();
+                window.location.reload();
+              }}
+              className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>مسح البيانات المؤقتة والكاش وإعادة التحميل</span>
             </button>
             <button
               onClick={() => {
@@ -2285,7 +2328,7 @@ export default function App() {
                 setToken(null);
                 setIsInitializingAuth(false);
               }}
-              className="w-full py-2 px-4 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold"
+              className="w-full py-2 px-4 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold cursor-pointer"
             >
               تسجيل الخروج والعودة لصفحة الدخول
             </button>
@@ -2312,7 +2355,7 @@ export default function App() {
               <Building2 className="w-5 h-5" />
             </div>
             <div className="flex flex-col text-right">
-              <h1 className="text-sm sm:text-base font-black text-blue-950 tracking-tight leading-tight">{config.buildingName || 'عمارة التقوى'}</h1>
+              <h1 className="text-sm sm:text-base font-black text-blue-950 tracking-tight leading-tight">{config.buildingName || 'اتحاد الملاك'}</h1>
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-bold text-slate-700">
                   {role === 'ASSISTANT'
@@ -2423,7 +2466,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-900 text-sm">قائمة النظام</h3>
-                    <p className="text-[10px] text-slate-400 font-bold">{config.buildingName || 'عمارة التقوى'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold">{config.buildingName || 'اتحاد الملاك'}</p>
                   </div>
                 </div>
                 <button 
@@ -2678,7 +2721,7 @@ export default function App() {
             <div className="text-right">
               <h3 className="font-extrabold text-xs sm:text-sm mb-0.5 flex items-center gap-1.5">
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>تثبيت تطبيق {config.buildingName || 'عمارة التقوى'}</span>
+                <span>تثبيت تطبيق {config.buildingName || 'اتحاد الملاك'}</span>
               </h3>
               <p className="text-[10px] sm:text-xs text-indigo-200">ثبّت التطبيق على شاشة جوالك الرئيسية لاستخدام سريع ومباشر وإمكانية العمل بدون إنترنت.</p>
             </div>
@@ -3367,6 +3410,7 @@ export default function App() {
             }}
             onDeleteRule={handleDeleteRule}
             onOpenEditRulesModal={() => setShowRulesEditModal(true)}
+            onSyncAllToCloud={handleSyncAllToCloud}
           />
         )}
 

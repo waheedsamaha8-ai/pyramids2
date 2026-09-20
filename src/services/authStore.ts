@@ -40,6 +40,17 @@ const DEFAULT_MASTER_ADMIN: StoredAdmin = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
+const WAHEED_MASTER_ADMIN: StoredAdmin = {
+  id: 'admin_master_waheed',
+  email: 'waheedsamaha8@gmail.com',
+  password: 'admin',
+  name: 'وحيد سماحة (رئيس الاتحاد)',
+  phone: '01000000000',
+  buildingName: 'اتحاد الملاك',
+  role: 'ADMIN',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
 // Clean empty Join Requests
 const SEED_JOIN_REQUESTS: StoredJoinRequest[] = [];
 
@@ -49,11 +60,14 @@ export function getLocalAdmins(): StoredAdmin[] {
     const list: StoredAdmin[] = raw ? JSON.parse(raw) : [];
     if (!list.some(a => a.email.toLowerCase().trim() === DEFAULT_MASTER_ADMIN.email.toLowerCase().trim())) {
       list.unshift(DEFAULT_MASTER_ADMIN);
-      localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(list));
     }
+    if (!list.some(a => a.email.toLowerCase().trim() === WAHEED_MASTER_ADMIN.email.toLowerCase().trim())) {
+      list.push(WAHEED_MASTER_ADMIN);
+    }
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(list));
     return list;
   } catch {
-    return [DEFAULT_MASTER_ADMIN];
+    return [DEFAULT_MASTER_ADMIN, WAHEED_MASTER_ADMIN];
   }
 }
 
