@@ -4,10 +4,7 @@ import {
   loginWithEmail, 
   registerAdmin, 
   submitJoinRequest, 
-  fetchAllJoinRequests,
-  getLocalAdmins,
-  getAdminSecurityCode,
-  setStoredAdminSecurityCode
+  fetchAllJoinRequests 
 } from '../services/authStore';
 import { 
   Mail, 
@@ -25,13 +22,8 @@ import {
   Sparkles,
   ArrowRight,
   Home,
-  Wrench,
-  Smartphone,
-  Download,
-  Database,
-  RefreshCw
+  Wrench
 } from 'lucide-react';
-import { clearTemporaryCache } from '../utils/cacheManager';
 
 interface LoginProps {
   onLoginSuccess: (user: any, token: string) => void;
@@ -54,24 +46,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [loginPassword, setLoginPassword] = useState('');
 
   // President Register inputs
-  const [adminName, setAdminName] = useState('محمد احمد');
-  const [buildingNameInput, setBuildingNameInput] = useState(() => {
-    try {
-      const raw = localStorage.getItem('custom_app_config');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.buildingName) return parsed.buildingName;
-      }
-      const rawCached = localStorage.getItem('cache_config');
-      if (rawCached) {
-        const parsed = JSON.parse(rawCached);
-        if (parsed.buildingName) return parsed.buildingName;
-      }
-    } catch {
-      // ignore
-    }
-    return 'اتحاد الملاك';
-  });
+  const [adminName, setAdminName] = useState('');
   const [adminPhone, setAdminPhone] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
@@ -86,49 +61,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [tenantPhone, setTenantPhone] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
-
-  // PWA Install state
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [pwaInstalled, setPwaInstalled] = useState(false);
-  const [isIosDevice, setIsIosDevice] = useState(false);
-  const [showIosPwaGuide, setShowIosPwaGuide] = useState(false);
-
-  React.useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-    setPwaInstalled(isStandalone);
-
-    const ua = window.navigator.userAgent.toLowerCase();
-    const isIos = /iphone|ipad|ipod/.test(ua);
-    setIsIosDevice(isIos);
-
-    const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    const handleInstalled = () => {
-      setPwaInstalled(true);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    window.addEventListener('appinstalled', handleInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-      window.removeEventListener('appinstalled', handleInstalled);
-    };
-  }, []);
-
-  const handlePwaInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setPwaInstalled(true);
-      setDeferredPrompt(null);
-    }
-  };
 
   // Handle standard custom email/password login
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -146,39 +78,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         if (data.flatNumber) {
           localStorage.setItem('resident_flat_number', data.flatNumber.toString());
         }
-
-        // Sync admin profile and building into application settings
-        if (data.role === 'ADMIN') {
-          try {
-            const raw = localStorage.getItem('custom_app_config');
-            const existingConfig = raw ? JSON.parse(raw) : {};
-            if ((data as any).buildingName) {
-              existingConfig.buildingName = (data as any).buildingName;
-            }
-            if (!existingConfig.adminResidentProfile) {
-              existingConfig.adminResidentProfile = {
-                flatNumber: 101,
-                name: data.name || 'محمد احمد (رئيس الاتحاد)',
-                phone: '',
-                activityType: 'سكني',
-                ownershipType: 'تمليك',
-                monthlyFee: 400,
-                initialBalance: 0,
-                notes: 'رئيس اتحاد الملاك',
-              };
-            } else if (data.name) {
-              existingConfig.adminResidentProfile.name = data.name;
-            }
-            if (!existingConfig.admins) existingConfig.admins = [];
-            if (!existingConfig.admins.includes(data.email.toLowerCase().trim())) {
-              existingConfig.admins.push(data.email.toLowerCase().trim());
-            }
-            localStorage.setItem('custom_app_config', JSON.stringify(existingConfig));
-          } catch {
-            // ignore
-          }
-        }
-
         const user = {
           email: data.email,
           displayName: data.name,
@@ -213,48 +112,13 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setSuccessMessage(null);
 
     try {
-      const selectedBuildingName = buildingNameInput.trim() || 'اتحاد الملاك';
-      const selectedAdminName = adminName.trim() || 'محمد احمد';
-
       const data = await registerAdmin({
-        name: selectedAdminName,
+        name: adminName.trim(),
         phone: adminPhone.trim(),
         email: adminEmail.trim(),
         password: adminPassword.trim(),
         securityKey: adminSecurityKey.trim(),
-        buildingName: selectedBuildingName,
       });
-
-      // Save buildingName, security code, and admin profile directly to application settings config
-      try {
-        const raw = localStorage.getItem('custom_app_config');
-        const existingConfig = raw ? JSON.parse(raw) : {};
-        existingConfig.buildingName = selectedBuildingName;
-        existingConfig.adminSecurityCode = adminSecurityKey.trim();
-        if (!existingConfig.admins) existingConfig.admins = [];
-        if (!existingConfig.admins.includes(adminEmail.toLowerCase().trim())) {
-          existingConfig.admins.push(adminEmail.toLowerCase().trim());
-        }
-        if (!existingConfig.adminResidentProfile) {
-          existingConfig.adminResidentProfile = {
-            flatNumber: 101,
-            name: selectedAdminName,
-            phone: adminPhone.trim(),
-            activityType: 'سكني',
-            ownershipType: 'تمليك',
-            monthlyFee: 400,
-            initialBalance: 0,
-            notes: 'رئيس اتحاد الملاك',
-          };
-        } else {
-          existingConfig.adminResidentProfile.name = selectedAdminName;
-          existingConfig.adminResidentProfile.phone = adminPhone.trim();
-        }
-        localStorage.setItem('custom_app_config', JSON.stringify(existingConfig));
-        setStoredAdminSecurityCode(adminSecurityKey.trim());
-      } catch {
-        // ignore
-      }
 
       setSuccessMessage('تم تفعيل وتسجيل حساب رئيس الاتحاد بنجاح! جاري الدخول للوحة التحكم...');
       
@@ -287,9 +151,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         const email = user.email?.toLowerCase().trim() || '';
 
         // 1. Is President / Admin?
-        const currentAdmins = getLocalAdmins();
-        const isAdminMatch = currentAdmins.some((a: any) => a.email.toLowerCase().trim() === email);
-        if (isAdminMatch || email === 'admin@altaqwa.com' || email === 'waheedsamaha8@gmail.com') {
+        if (email === 'waheedsamaha8@gmail.com') {
           (user as any).role = 'ADMIN';
           localStorage.setItem('custom_user_session', JSON.stringify({ ...user, role: 'ADMIN' }));
           onLoginSuccess(user, accessToken);
@@ -310,7 +172,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             return;
           } else if (match.status === 'PENDING') {
             await logoutUser();
-            setError('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد. يرجى المحاولة لاحقاً بمجرد الموافقة.');
+            setError('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد (وحيد سماحة). يرجى المحاولة لاحقاً بمجرد الموافقة.');
             return;
           } else if (match.status === 'DECLINED') {
             await logoutUser();
@@ -375,7 +237,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
       const result = await submitJoinRequest(payload);
 
-      setSuccessMessage(result.message || 'تم إرسال طلب الانضمام بنجاح! طلبك قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد.');
+      setSuccessMessage(result.message || 'تم إرسال طلب الانضمام بنجاح! طلبك قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد (وحيد سماحة).');
       // Clear fields
       setFlatNumber('');
       setOwnerName('');
@@ -401,8 +263,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-900 dark:bg-blue-800 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-900/20 mb-3 border border-blue-700/40">
             <Building className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-blue-950 dark:text-white text-center">اتحاد ملاك {buildingNameInput || 'عمارة التقوى'}</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-[11px] text-center mt-1 font-bold">النظام الذكي والموحد لإدارة شؤون وماليات وخدمات العمارة</p>
+          <h1 className="text-xl sm:text-2xl font-black text-blue-950 dark:text-white text-center">اتحاد ملاك بيراميدز فيو ١</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-xs text-center mt-1 font-bold">النظام الذكي والموحد لإدارة شؤون وماليات وخدمات العمارة</p>
         </div>
 
         {/* ========================================================================= */}
@@ -550,7 +412,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       required
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="admin@altaqwa.com"
+                      placeholder="waheedsamaha8@gmail.com"
                       className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
                     />
                   </div>
@@ -630,24 +492,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       required
                       value={adminName}
                       onChange={(e) => setAdminName(e.target.value)}
-                      placeholder="محمد احمد"
-                      className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">اسم العمارة / اتحاد الملاك</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Building className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      value={buildingNameInput}
-                      onChange={(e) => setBuildingNameInput(e.target.value)}
-                      placeholder="عمارة التقوى"
+                      placeholder="وحيد سماحة"
                       className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
                     />
                   </div>
@@ -682,7 +527,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                         required
                         value={adminEmail}
                         onChange={(e) => setAdminEmail(e.target.value)}
-                        placeholder="president@gmail.com"
+                        placeholder="waheedsamaha8@gmail.com"
                         className="w-full pl-2 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
                         dir="ltr"
                       />
@@ -709,8 +554,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 dark:text-slate-300 text-[10px] font-bold text-right">رمز الأمان الإداري الخاص برئيس الاتحاد</label>
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">(الرمز المعتمد: {getAdminSecurityCode()})</span>
+                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold text-right">رمز الأمان الإداري الخاص برئيس الاتحاد</label>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">(الرمز الافتراضي: admin123)</span>
                   </div>
                   <div className="relative">
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
@@ -721,7 +566,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       required
                       value={adminSecurityKey}
                       onChange={(e) => setAdminSecurityKey(e.target.value)}
-                      placeholder={getAdminSecurityCode()}
+                      placeholder="admin123"
                       className="w-full pl-4 pr-10 py-2 text-sm bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl focus:border-amber-500 focus:outline-none text-left font-mono font-bold text-amber-900 dark:text-amber-200"
                       dir="ltr"
                     />
@@ -1131,95 +976,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        {/* Mobile PWA Install Banner */}
-        {!pwaInstalled && (deferredPrompt || isIosDevice) && (
-          <div className="mt-5 p-3 sm:p-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl flex items-center justify-between border border-blue-700/50 shadow-md">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/15">
-                <Smartphone className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div className="text-right">
-                <h4 className="text-xs font-black">تثبيت التطبيق على هاتفك</h4>
-                <p className="text-[10px] text-blue-200 font-medium">أيقونة مخصصة وسرعة تشغيل فورية</p>
-              </div>
-            </div>
-            {deferredPrompt ? (
-              <button
-                type="button"
-                onClick={handlePwaInstall}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black rounded-xl text-xs flex items-center gap-1 shadow-sm transition cursor-pointer shrink-0"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>تثبيت</span>
-              </button>
-            ) : isIosDevice ? (
-              <button
-                type="button"
-                onClick={() => setShowIosPwaGuide(true)}
-                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 active:scale-95 text-white font-black rounded-xl text-xs flex items-center gap-1 transition cursor-pointer shrink-0"
-              >
-                <span>طريقة التثبيت</span>
-              </button>
-            ) : null}
-          </div>
-        )}
-
-        {/* iOS PWA Install Guide Modal */}
-        {showIosPwaGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-4" dir="rtl">
-            <div className="bg-slate-800 border border-slate-700 text-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
-              <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center mx-auto">
-                <Smartphone className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-black text-center text-slate-100">تثبيت التطبيق على الآيفون / الآيباد</h3>
-              <div className="space-y-3 text-xs text-slate-300 bg-slate-900/60 p-4 rounded-2xl border border-slate-700/60">
-                <div className="flex items-start gap-2.5">
-                  <span className="w-5 h-5 bg-blue-600 text-white font-bold rounded-full flex items-center justify-center shrink-0 text-[10px]">١</span>
-                  <p>اضغط على أيقونة <strong>المشاركة (Share)</strong> في شريط متصفح Safari.</p>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <span className="w-5 h-5 bg-blue-600 text-white font-bold rounded-full flex items-center justify-center shrink-0 text-[10px]">٢</span>
-                  <p>اختر <strong>إضافة إلى الشاشة الرئيسية (Add to Home Screen)</strong>.</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowIosPwaGuide(false)}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition text-xs cursor-pointer"
-              >
-                فهمت، إغلاق
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Footer & Cache helper */}
-        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col items-center gap-2">
+        {/* Footer */}
+        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col items-center gap-1">
           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-            مع تحيات مجلس إدارة {buildingNameInput || 'اتحاد الملاك'}
+            مع تحيات مجلس إدارة اتحاد ملاك بيراميدز فيو ١
           </span>
           <span className="text-[10px] text-slate-400 font-medium">
-            رئيس الاتحاد: {adminName || 'محمد احمد'}
+            رئيس الاتحاد: وحيد سماحة
           </span>
-
-          <button
-            type="button"
-            onClick={async () => {
-              await clearTemporaryCache();
-              if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                for (const r of regs) {
-                  await r.unregister();
-                }
-              }
-              window.location.reload();
-            }}
-            className="mt-1 text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-bold flex items-center gap-1 transition cursor-pointer p-1 rounded-md"
-            title="تفريغ الكاش وحل مشاكل العرض والتجميد"
-          >
-            <Database className="w-3 h-3" />
-            <span>مسح البيانات المؤقتة والكاش وإعادة التحميل</span>
-          </button>
         </div>
       </div>
     </div>

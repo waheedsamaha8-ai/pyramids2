@@ -6,7 +6,6 @@ export interface StoredAdmin {
   phone: string;
   email: string;
   password: string;
-  buildingName?: string;
   role: 'ADMIN';
   createdAt: string;
 }
@@ -31,22 +30,10 @@ const LOCAL_JOIN_REQUESTS_KEY = 'custom_join_requests';
 // Default Master Admin
 const DEFAULT_MASTER_ADMIN: StoredAdmin = {
   id: 'admin_master_1',
-  email: 'admin@altaqwa.com',
-  password: 'admin123',
-  name: 'محمد احمد (رئيس الاتحاد)',
-  phone: '01000000000',
-  buildingName: 'اتحاد الملاك',
-  role: 'ADMIN',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-
-const WAHEED_MASTER_ADMIN: StoredAdmin = {
-  id: 'admin_master_waheed',
   email: 'waheedsamaha8@gmail.com',
-  password: 'admin',
+  password: 'admin123',
   name: 'وحيد سماحة (رئيس الاتحاد)',
   phone: '01000000000',
-  buildingName: 'اتحاد الملاك',
   role: 'ADMIN',
   createdAt: '2026-01-01T00:00:00.000Z',
 };
@@ -60,14 +47,11 @@ export function getLocalAdmins(): StoredAdmin[] {
     const list: StoredAdmin[] = raw ? JSON.parse(raw) : [];
     if (!list.some(a => a.email.toLowerCase().trim() === DEFAULT_MASTER_ADMIN.email.toLowerCase().trim())) {
       list.unshift(DEFAULT_MASTER_ADMIN);
+      localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(list));
     }
-    if (!list.some(a => a.email.toLowerCase().trim() === WAHEED_MASTER_ADMIN.email.toLowerCase().trim())) {
-      list.push(WAHEED_MASTER_ADMIN);
-    }
-    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(list));
     return list;
   } catch {
-    return [DEFAULT_MASTER_ADMIN, WAHEED_MASTER_ADMIN];
+    return [DEFAULT_MASTER_ADMIN];
   }
 }
 
@@ -162,14 +146,13 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
       success: true,
       role: 'ADMIN',
       email: adminMatch.email,
-      name: adminMatch.name || 'محمد احمد (رئيس الاتحاد)',
-      buildingName: adminMatch.buildingName || 'اتحاد الملاك',
-    } as any;
+      name: adminMatch.name || 'وحيد سماحة (رئيس الاتحاد)',
+    };
   }
 
   // Check Assistant Config from local storage cache + Default assistant credentials
   try {
-    let assistantEmail = 'assistant@altaqwa.com';
+    let assistantEmail = 'assistant@pyramids.com';
     let assistantPassword = 'assistant123';
     let assistantName = 'المساعد الفني';
 
@@ -183,7 +166,7 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
       }
     }
 
-    const defaultAssistantEmails = ['assistant@altaqwa.com', 'assistant@pyramids.com', 'assistant'];
+    const defaultAssistantEmails = ['assistant@pyramids.com', 'assistant'];
     const defaultAssistantPasswords = ['assistant123', '123456', '123', 'assistant'];
 
     const isAssistantEmailMatch = email === assistantEmail || defaultAssistantEmails.includes(email);
@@ -221,7 +204,7 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
   }
 
   if (residentMatch.status === 'PENDING') {
-    throw new Error('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد. يرجى المحاولة لاحقاً بمجرد الموافقة.');
+    throw new Error('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد (وحيد سماحة). يرجى المحاولة لاحقاً بمجرد الموافقة.');
   }
 
   if (residentMatch.status === 'DECLINED') {
@@ -239,42 +222,6 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
 }
 
 /**
- * Retrieve current dynamic admin security code.
- */
-export function getAdminSecurityCode(): string {
-  try {
-    const customCode = localStorage.getItem('admin_security_code');
-    if (customCode && customCode.trim()) return customCode.trim();
-    const rawConfig = localStorage.getItem('custom_app_config');
-    if (rawConfig) {
-      const parsed = JSON.parse(rawConfig);
-      if (parsed.adminSecurityCode && parsed.adminSecurityCode.trim()) {
-        return parsed.adminSecurityCode.trim();
-      }
-    }
-  } catch {
-    // fallback
-  }
-  return 'admin123';
-}
-
-/**
- * Update dynamic admin security code.
- */
-export function setStoredAdminSecurityCode(newCode: string): void {
-  const code = (newCode || 'admin123').trim();
-  try {
-    localStorage.setItem('admin_security_code', code);
-    const rawConfig = localStorage.getItem('custom_app_config');
-    const parsed = rawConfig ? JSON.parse(rawConfig) : {};
-    parsed.adminSecurityCode = code;
-    localStorage.setItem('custom_app_config', JSON.stringify(parsed));
-  } catch {
-    // ignore
-  }
-}
-
-/**
  * Register / Update Admin Account.
  */
 export async function registerAdmin(payload: {
@@ -283,12 +230,10 @@ export async function registerAdmin(payload: {
   email: string;
   password: string;
   securityKey: string;
-  buildingName?: string;
-}): Promise<{ success: boolean; email: string; name: string; buildingName?: string }> {
-  const currentSecurityCode = getAdminSecurityCode();
-  const validKeys = [currentSecurityCode, 'admin123', 'PYRAMIDS-ADMIN-2026', 'pyramids123', '123456'];
+}): Promise<{ success: boolean; email: string; name: string }> {
+  const validKeys = ['admin123', 'PYRAMIDS-ADMIN-2026', 'pyramids123', '123456'];
   if (!validKeys.includes(payload.securityKey.trim())) {
-    throw new Error(`رمز التحقق الإداري غير صحيح. الرمز المعتمد لرئيس الاتحاد هو: ${currentSecurityCode}`);
+    throw new Error('رمز التحقق الإداري غير صحيح. الرمز المعتمد لرئيس الاتحاد هو: admin123');
   }
 
   // Try server API first
@@ -306,7 +251,6 @@ export async function registerAdmin(payload: {
       existing.name = payload.name;
       existing.phone = payload.phone;
       existing.password = payload.password;
-      if (payload.buildingName) existing.buildingName = payload.buildingName;
     } else {
       admins.push({
         id: `admin_${Date.now()}`,
@@ -314,7 +258,6 @@ export async function registerAdmin(payload: {
         phone: payload.phone,
         email: payload.email.toLowerCase().trim(),
         password: payload.password,
-        buildingName: payload.buildingName || 'اتحاد الملاك',
         role: 'ADMIN',
         createdAt: new Date().toISOString(),
       });
@@ -330,7 +273,6 @@ export async function registerAdmin(payload: {
     existing.name = payload.name;
     existing.phone = payload.phone;
     existing.password = payload.password;
-    if (payload.buildingName) existing.buildingName = payload.buildingName;
   } else {
     admins.push({
       id: `admin_${Date.now()}`,
@@ -338,7 +280,6 @@ export async function registerAdmin(payload: {
       phone: payload.phone,
       email: payload.email.toLowerCase().trim(),
       password: payload.password,
-      buildingName: payload.buildingName || 'اتحاد الملاك',
       role: 'ADMIN',
       createdAt: new Date().toISOString(),
     });
@@ -349,7 +290,6 @@ export async function registerAdmin(payload: {
     success: true,
     email: payload.email.toLowerCase().trim(),
     name: payload.name,
-    buildingName: payload.buildingName || 'اتحاد الملاك',
   };
 }
 
@@ -420,7 +360,7 @@ export async function submitJoinRequest(payload: {
 
   return {
     success: true,
-    message: 'تم إرسال طلب الانضمام بنجاح وهو قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد.',
+    message: 'تم إرسال طلب الانضمام بنجاح وهو قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد (وحيد سماحة).',
   };
 }
 

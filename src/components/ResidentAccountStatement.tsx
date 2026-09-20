@@ -67,7 +67,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
       return {
         id: `res_admin_${p.flatNumber || 101}`,
         flatNumber: p.flatNumber || 101,
-        name: p.name || 'محمد احمد (رئيس الاتحاد)',
+        name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
         phone: p.phone || '',
         activityType: p.activityType || 'سكني',
         ownershipType: p.ownershipType || 'تمليك',
@@ -384,7 +384,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               </div>
               <div>
                 <span className="text-xs font-black text-slate-800 block">اختر رقم الوحدة واسم الساكن لعرض كشف الحساب:</span>
-                <span className="text-[9px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها</span>
+                <span className="text-[10px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها</span>
               </div>
             </div>
             
@@ -426,7 +426,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                 </span>
               )}
             </h2>
-            <p className="text-[10px] text-slate-400 font-semibold">
+            <p className="text-[11px] text-slate-400 font-semibold">
               تاريخ بدء المحاسبة المعتمد: <span className="font-bold text-slate-600">{accountingStartDate}</span> | التقرير محدث حتى تاريخ اليوم
             </p>
           </div>
@@ -883,11 +883,11 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
             </div>
 
             {unitPayments.length === 0 ? (
-              <div className="py-8 bg-slate-50/50 rounded-2xl border border-slate-100 text-center text-slate-400 text-[11px] font-semibold">
+              <div className="py-8 bg-slate-50/50 rounded-2xl border border-slate-100 text-center text-slate-400 text-xs font-semibold">
                 لا توجد عمليات تحصيل أو إيصالات مسجلة لهذه الوحدة حتى الآن.
               </div>
             ) : (
-              <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-2xs w-full bg-white text-[11px]">
+              <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-2xs w-full bg-white">
                 <div className="overflow-x-auto w-full">
                   <table className="w-full text-right border-collapse text-xs">
                     <thead>
@@ -959,7 +959,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
         <div id="statement-printable-area" className="printable-area hidden print:block text-right p-6 font-sans" dir="rtl">
           {/* Header */}
           <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-6">
-            <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك {config.buildingName || 'عمارة التقوى'}</h1>
+            <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك عمارة بيراميدز فيو ١</h1>
             <p className="text-sm font-bold text-slate-600">
               كشف حساب ومطالبات اشتراكات - وحدة رقم ({activeResident.flatNumber})
             </p>
@@ -1102,7 +1102,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
 
           {/* Page Footer */}
           <div className="mt-16 text-center text-[10px] text-slate-400 font-semibold">
-            تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة {config.buildingName || 'عمارة التقوى'}
+            تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة عمارة بيراميدز فيو ١
           </div>
         </div>
       )}

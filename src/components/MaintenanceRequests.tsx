@@ -121,7 +121,7 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
     } else if (digits.length === 10 && digits.startsWith('1')) {
       waNumber = '20' + digits;
     }
-    const msg = `السلام عليكم أستاذ ${name}، أتواصل معك بخصوص أعمال ${specialty} في العمارة.`;
+    const msg = `السلام عليكم أستاذ ${name}، أتواصل معك بخصوص أعمال ${specialty} في عمارة بيراميدز فيو ١.`;
     return `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
   };
 

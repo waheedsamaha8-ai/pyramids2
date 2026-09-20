@@ -64,7 +64,6 @@ import {
 import { initAuth, logoutUser } from './services/firebaseConfig';
 import * as googleApi from './services/googleApi';
 import * as offlineSync from './services/offlineSync';
-import { clearTemporaryCache } from './utils/cacheManager';
 import { UserRole, Resident, Payment, Expense, AppNotification, BuildingRules, AppConfig, MaintenanceRequest, Poll, AdminDecision, BuildingEvent, ChatMessage, PublicComplaint, ComplaintComment, FloorConfig, Craftsman, CraftsmanComment } from './types';
 
 // Importing Custom Components
@@ -86,45 +85,63 @@ import { ResidentAccountStatement } from './components/ResidentAccountStatement'
 import { calculateResidentFinancials } from './utils/financialCalculations';
 import { removeUnitFromBuildingLayout, addUnitToBuildingLayout, compareFlatNumbers, isSameFlatNumber, parseFlatNumber, getUnitNumbersForFloor, deriveFloorConfigsFromResidents } from './utils/buildingStructure';
 
-export default function App() {
-  // Auth state - initialized synchronously to eliminate any page refresh flicker
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('custom_user_session');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('google_access_token') || (localStorage.getItem('custom_user_session') ? 'local-token' : null);
-  });
-  const [role, setRole] = useState<UserRole>(() => {
-    try {
-      const saved = localStorage.getItem('custom_user_session');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.role) return parsed.role;
-      }
-    } catch {}
-    return 'RESIDENT';
-  });
-  const [flatNumber, setFlatNumber] = useState<number | string | undefined>(() => {
-    const f = localStorage.getItem('resident_flat_number');
-    return f ? f : undefined;
-  });
-  const [isInitializingAuth, setIsInitializingAuth] = useState(true);
+// Synchronous session and state hydration helpers for instant refresh
+const getInitialSavedSession = (): User | null => {
+  try {
+    const s = localStorage.getItem('custom_user_session');
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+};
 
-  // App configurations & lists
+const getInitialSavedToken = (): string | null => {
+  return localStorage.getItem('google_access_token') || (localStorage.getItem('custom_user_session') ? 'local-token' : null);
+};
+
+const getInitialRole = (initialUser: User | null): UserRole => {
+  if (!initialUser) return 'RESIDENT';
+  if ((initialUser as any).role) return (initialUser as any).role;
+  const email = initialUser.email?.toLowerCase().trim();
+  if (email === 'waheedsamaha8@gmail.com') return 'ADMIN';
+  if (email === 'assistant@pyramids.com' || email === 'assistant') return 'ASSISTANT';
+  return 'RESIDENT';
+};
+
+const getInitialFlatNumber = (initialUser: User | null): number | string | undefined => {
+  if (!initialUser) return undefined;
+  if ((initialUser as any).flatNumber) return (initialUser as any).flatNumber;
+  const cached = localStorage.getItem('resident_flat_number');
+  if (cached) return cached;
+  const email = initialUser.email?.toLowerCase().trim();
+  if (email === 'waheedsamaha8@gmail.com') return 207;
+  return undefined;
+};
+
+const getInitialTab = (): 'dashboard' | 'residents' | 'payments' | 'expenses' | 'summaries' | 'history' | 'maintenance' | 'polls' | 'calendar' | 'chat' | 'settings' | 'debts-report' => {
+  try {
+    const saved = localStorage.getItem('pyramids_active_tab') as any;
+    const validTabs = ['dashboard', 'residents', 'payments', 'expenses', 'summaries', 'history', 'maintenance', 'polls', 'calendar', 'chat', 'settings', 'debts-report'];
+    if (saved && validTabs.includes(saved)) {
+      return saved;
+    }
+  } catch {}
+  return 'dashboard';
+};
+
+export default function App() {
+  // Synchronous session hydration for instant, flicker-free refresh
+  const initialUser = useMemo(() => getInitialSavedSession(), []);
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [token, setToken] = useState<string | null>(() => getInitialSavedToken());
+  const [role, setRole] = useState<UserRole>(() => getInitialRole(initialUser));
+  const [flatNumber, setFlatNumber] = useState<number | string | undefined>(() => getInitialFlatNumber(initialUser));
+  const [isInitializingAuth, setIsInitializingAuth] = useState<boolean>(!initialUser);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState<boolean>(false);
+
+  // App configurations & lists initialized synchronously from offline cache
   const [config, setConfig] = useState<AppConfig>(() => {
-    try {
-      const customConf = localStorage.getItem('custom_app_config');
-      if (customConf) return JSON.parse(customConf);
-      const cached = localStorage.getItem('cache_config');
-      if (cached) return JSON.parse(cached);
-    } catch {}
-    return {
-      buildingName: 'اتحاد الملاك',
+    const baseConfig: AppConfig = {
       expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
       paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
       activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري', 'بدون تشطيب'],
@@ -141,8 +158,8 @@ export default function App() {
         'بدون تشطيب': 0,
       },
       adminResidentProfile: {
-        flatNumber: 101,
-        name: 'محمد احمد (رئيس الاتحاد)',
+        flatNumber: 207,
+        name: 'وحيد سماحة (رئيس الاتحاد)',
         phone: '',
         activityType: 'سكني',
         ownershipType: 'تمليك',
@@ -151,21 +168,131 @@ export default function App() {
         notes: 'رئيس اتحاد الملاك',
       }
     };
+    try {
+      const localConfig = offlineSync.getCachedData<AppConfig>('config');
+      if (localConfig) {
+        return {
+          ...baseConfig,
+          ...localConfig,
+          adminResidentProfile: localConfig.adminResidentProfile || baseConfig.adminResidentProfile,
+        };
+      }
+    } catch {}
+    return baseConfig;
   });
-  const [rules, setRules] = useState<string[]>([]);
-  const [residents, setResidents] = useState<Resident[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
 
-  // New features states
-  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
-  const [craftsmen, setCraftsmen] = useState<Craftsman[]>([]);
-  const [polls, setPolls] = useState<Poll[]>([]);
-  const [decisions, setDecisions] = useState<AdminDecision[]>([]);
-  const [events, setEvents] = useState<BuildingEvent[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [complaints, setComplaints] = useState<PublicComplaint[]>([]);
-  const [buildingLayout, setBuildingLayout] = useState<FloorConfig[]>([]);
+  const [rules, setRules] = useState<string[]>(() => {
+    try {
+      const r = offlineSync.getCachedData<any>('rules');
+      return r?.rules || [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [residents, setResidents] = useState<Resident[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<Resident[]>('residents');
+      if (raw && Array.isArray(raw)) {
+        return raw
+          .filter(r => !['1', '2', '3'].includes(String(r.id)) || (r.name !== 'محمد أحمد' && r.name !== 'خالد مصطفى' && r.name !== 'سمير عبد الله'))
+          .map(r => ({
+            ...r,
+            notes: (r.notes || '').includes('توليد تلقائي') ? '' : (r.notes || '')
+          }));
+      }
+    } catch {}
+    return [];
+  });
+
+  const [payments, setPayments] = useState<Payment[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<Payment[]>('payments');
+      return raw && Array.isArray(raw) ? raw.filter(p => p.id !== 'p1') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<Expense[]>('expenses');
+      return raw && Array.isArray(raw) ? raw.filter(e => e.id !== 'e1') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // New features states initialized synchronously
+  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<MaintenanceRequest[]>('maintenance');
+      return raw && Array.isArray(raw) ? raw.filter(m => !m.id.startsWith('req_seed_')) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [craftsmen, setCraftsmen] = useState<Craftsman[]>(() => {
+    try {
+      return offlineSync.getCachedData<Craftsman[]>('craftsmen') || [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [polls, setPolls] = useState<Poll[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<Poll[]>('polls');
+      return raw && Array.isArray(raw) ? raw.filter(p => !p.id.startsWith('poll_seed_')) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [decisions, setDecisions] = useState<AdminDecision[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<AdminDecision[]>('admin_decisions');
+      return raw && Array.isArray(raw) ? raw.filter(d => !d.id.startsWith('dec_seed_')) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [events, setEvents] = useState<BuildingEvent[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<BuildingEvent[]>('events');
+      return raw && Array.isArray(raw) ? raw.filter(e => !e.id.startsWith('ev_seed_')) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<ChatMessage[]>('chat_messages');
+      return raw && Array.isArray(raw) ? raw.filter(m => !m.id.startsWith('msg_seed_')) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [complaints, setComplaints] = useState<PublicComplaint[]>(() => {
+    try {
+      const raw = offlineSync.getCachedData<PublicComplaint[]>('public_complaints');
+      return raw && Array.isArray(raw) ? raw.filter(c => !c.id.startsWith('comp_seed_')) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [buildingLayout, setBuildingLayout] = useState<FloorConfig[]>(() => {
+    try {
+      return offlineSync.getCachedData<FloorConfig[]>('building_layout') || [];
+    } catch {
+      return [];
+    }
+  });
   
   // Report Generator States
   const [reportResidentId, setReportResidentId] = useState<string>('');
@@ -173,8 +300,16 @@ export default function App() {
   const [reportStartDate, setReportStartDate] = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]);
   const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // UI state
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'residents' | 'payments' | 'expenses' | 'summaries' | 'history' | 'maintenance' | 'polls' | 'calendar' | 'chat' | 'settings' | 'debts-report'>('dashboard');
+  // UI state with active tab persistence
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'residents' | 'payments' | 'expenses' | 'summaries' | 'history' | 'maintenance' | 'polls' | 'calendar' | 'chat' | 'settings' | 'debts-report'>(() => getInitialTab());
+
+  // Automatically save active tab to keep user position on refresh
+  useEffect(() => {
+    if (activeTab) {
+      localStorage.setItem('pyramids_active_tab', activeTab);
+    }
+  }, [activeTab]);
+
   const [selectedActivityModal, setSelectedActivityModal] = useState<string | null>(null);
   const [maintenanceSubTab, setMaintenanceSubTab] = useState<'requests' | 'directory'>('requests');
   const [chatSubTab, setChatSubTab] = useState<'room' | 'complaints'>('room');
@@ -558,26 +693,20 @@ export default function App() {
 
     let authResolved = false;
 
-    // Safety timeout: Ensure the loading gate resolves within 1.5 seconds if Firebase is slow
+    // Fast background bootstrap if session was already hydrated synchronously
+    if (initialUser) {
+      const initialSavedTok = getInitialSavedToken() || 'local-token';
+      googleApi.setAccessToken(initialSavedTok);
+      bootstrapApp(initialUser, initialSavedTok, true);
+    }
+
+    // Safety timeout: Ensure the loading gate resolves rapidly
     const authTimeout = setTimeout(() => {
       if (!authResolved) {
         authResolved = true;
-        const savedSession = localStorage.getItem('custom_user_session');
-        if (savedSession) {
-          try {
-            const parsed = JSON.parse(savedSession);
-            setUser(parsed);
-            setToken('local-token');
-            googleApi.setAccessToken('local-token');
-            bootstrapApp(parsed, 'local-token');
-            return;
-          } catch (e) {
-            console.error('Failed to parse custom user session:', e);
-          }
-        }
         setIsInitializingAuth(false);
       }
-    }, 1500);
+    }, 1000);
 
     const unsubscribe = initAuth(
       (currentUser, accessToken) => {
@@ -586,7 +715,7 @@ export default function App() {
         setUser(currentUser);
         setToken(accessToken);
         googleApi.setAccessToken(accessToken);
-        bootstrapApp(currentUser, accessToken);
+        bootstrapApp(currentUser, accessToken, true);
       },
       () => {
         authResolved = true;
@@ -599,7 +728,8 @@ export default function App() {
             setUser(parsed);
             setToken('local-token');
             googleApi.setAccessToken('local-token');
-            bootstrapApp(parsed, 'local-token');
+            setIsInitializingAuth(false);
+            bootstrapApp(parsed, 'local-token', true);
             return;
           } catch (e) {
             console.error('Failed to parse custom user session:', e);
@@ -719,26 +849,18 @@ export default function App() {
   };
 
   // Setup/Bootstrap app database
-  const bootstrapApp = async (currentUser: User, accessToken: string) => {
-    setIsInitializingAuth(true);
+  const bootstrapApp = async (currentUser: User, accessToken: string, isBackground = false) => {
+    if (!isBackground) {
+      setIsInitializingAuth(true);
+    } else {
+      setIsBackgroundSyncing(true);
+    }
     try {
       // Find or create Sheets database
       await googleApi.initializeSpreadsheet();
       
       // Load configurations to determine user role
       const appConfig = await googleApi.getAppConfig();
-      // Merge custom_app_config if user has local custom settings from registration/login
-      try {
-        const customLocal = localStorage.getItem('custom_app_config');
-        if (customLocal) {
-          const parsed = JSON.parse(customLocal);
-          if (parsed.buildingName) appConfig.buildingName = parsed.buildingName;
-          if (parsed.adminSecurityCode) appConfig.adminSecurityCode = parsed.adminSecurityCode;
-          if (parsed.adminResidentProfile) {
-            appConfig.adminResidentProfile = { ...appConfig.adminResidentProfile, ...parsed.adminResidentProfile };
-          }
-        }
-      } catch {}
       setConfig(appConfig);
       if (appConfig.buildingLayout && appConfig.buildingLayout.length > 0) {
         setBuildingLayout(appConfig.buildingLayout);
@@ -758,11 +880,11 @@ export default function App() {
         detectedRole = 'ASSISTANT';
       } else if (
         (currentUser as any).role === 'ADMIN' ||
-        email === 'admin@altaqwa.com' ||
+        email === 'waheedsamaha8@gmail.com' ||
         appConfig.admins.some(a => a.toLowerCase().trim() === email)
       ) {
         detectedRole = 'ADMIN';
-        const adminFlat = appConfig.adminResidentProfile?.flatNumber || 101;
+        const adminFlat = appConfig.adminResidentProfile?.flatNumber || 207;
         setFlatNumber(adminFlat);
         localStorage.setItem('resident_flat_number', String(adminFlat));
       } else if (
@@ -781,13 +903,14 @@ export default function App() {
 
       setRole(detectedRole);
 
-      // Refresh all sheets
+      // Refresh all sheets smoothly
       await refreshAllData();
 
     } catch (err: any) {
       logError(err, 'bootstrapApp');
     } finally {
       setIsInitializingAuth(false);
+      setIsBackgroundSyncing(false);
       // Run background sync if online
       triggerBackgroundSync();
     }
@@ -1710,7 +1833,7 @@ export default function App() {
         const newAdminRes: Resident = {
           id: `res_president_${targetFlat}_${Date.now()}`,
           flatNumber: targetFlat,
-          name: prof.name || 'محمد احمد (رئيس الاتحاد)',
+          name: prof.name || 'وحيد سماحة (رئيس الاتحاد)',
           phone: prof.phone || '',
           activityType: prof.activityType || 'سكني',
           ownershipType: prof.ownershipType || 'تمليك',
@@ -1722,20 +1845,9 @@ export default function App() {
       }
 
       // If in resident mode or if active flatNumber matches, update flatNumber
-      if (role === 'RESIDENT' || role === 'ADMIN') {
+      if (role === 'RESIDENT' || user?.email === 'waheedsamaha8@gmail.com') {
         setFlatNumber(targetFlat);
         localStorage.setItem('resident_flat_number', String(targetFlat));
-      }
-
-      // Update current user display name in state and session if admin
-      if (prof.name && user && role === 'ADMIN') {
-        const updatedUser = { ...user, displayName: prof.name };
-        setUser(updatedUser);
-        try {
-          localStorage.setItem('custom_user_session', JSON.stringify(updatedUser));
-        } catch {
-          // ignore
-        }
       }
     }
 
@@ -1756,38 +1868,6 @@ export default function App() {
         .catch(() => offlineSync.enqueueAction('UPDATE_CONFIG', updatedConfig));
     } else {
       offlineSync.enqueueAction('UPDATE_CONFIG', updatedConfig);
-    }
-  };
-
-  // Full direct sync of all data tables and cloud resources to Google Sheets and Drive
-  const handleSyncAllToCloud = async (): Promise<{ success: boolean; message: string }> => {
-    try {
-      setSyncing(true);
-      setSyncStatusText('جاري مزامنة كافة الجداول وقواعد البيانات إلى Google Sheets...');
-      await googleApi.initializeSpreadsheet();
-      const res = await googleApi.syncAllLocalDataToGoogleSheets({
-        residents,
-        payments,
-        expenses,
-        rules,
-        config,
-        craftsmen,
-        messages,
-        decisions,
-        polls,
-        complaints,
-        maintenanceRequests,
-        events,
-      });
-      addNotification('حفظ ومزامنة السحابي', res.message, 'success', 'services');
-      return res;
-    } catch (err: any) {
-      const msg = err?.message || 'تعذر إتمام المزامنة مع Google Sheets و Drive';
-      addNotification('خطأ في المزامنة', msg, 'error', 'services');
-      return { success: false, message: msg };
-    } finally {
-      setSyncing(false);
-      setSyncStatusText('');
     }
   };
 
@@ -2218,7 +2298,7 @@ export default function App() {
       return {
         id: `res_admin_${p.flatNumber || 101}`,
         flatNumber: p.flatNumber || 101,
-        name: p.name || 'محمد احمد (رئيس الاتحاد)',
+        name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
         phone: p.phone || '',
         activityType: p.activityType || 'سكني',
         ownershipType: p.ownershipType || 'تمليك',
@@ -2284,7 +2364,10 @@ export default function App() {
     }
   };
 
-  // Check initializing state first to prevent login screen flicker during page refresh/bootstrap
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
   if (isInitializingAuth) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#0b1329] flex flex-col items-center justify-center p-6 text-right" dir="rtl">
@@ -2294,7 +2377,7 @@ export default function App() {
             <Building className="w-6 h-6 text-blue-900 dark:text-blue-400 absolute animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام {config.buildingName || 'اتحاد الملاك'}</h2>
+            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام بيراميدز فيو ١</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 leading-relaxed">
               يرجى الانتظار قليلاً بينما نقوم بمزامنة البيانات وتأمين جلسة العمل...
             </p>
@@ -2307,19 +2390,9 @@ export default function App() {
           <div className="pt-2 flex flex-col gap-2">
             <button
               onClick={() => setIsInitializingAuth(false)}
-              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
             >
               متابعة الدخول للوحة التحكم فوراً
-            </button>
-            <button
-              onClick={async () => {
-                await clearTemporaryCache();
-                window.location.reload();
-              }}
-              className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>مسح البيانات المؤقتة والكاش وإعادة التحميل</span>
             </button>
             <button
               onClick={() => {
@@ -2328,7 +2401,7 @@ export default function App() {
                 setToken(null);
                 setIsInitializingAuth(false);
               }}
-              className="w-full py-2 px-4 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold cursor-pointer"
+              className="w-full py-2 px-4 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold"
             >
               تسجيل الخروج والعودة لصفحة الدخول
             </button>
@@ -2336,10 +2409,6 @@ export default function App() {
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
@@ -2355,16 +2424,14 @@ export default function App() {
               <Building2 className="w-5 h-5" />
             </div>
             <div className="flex flex-col text-right">
-              <h1 className="text-sm sm:text-base font-black text-blue-950 tracking-tight leading-tight">{config.buildingName || 'اتحاد الملاك'}</h1>
+              <h1 className="text-sm sm:text-base font-black text-blue-950 tracking-tight leading-tight">بيراميدز فيو ١</h1>
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-bold text-slate-700">
                   {role === 'ASSISTANT'
                     ? 'المساعد الفني'
-                    : role === 'ADMIN'
-                    ? (config.adminResidentProfile?.name || user?.displayName || 'رئيس الاتحاد')
-                    : (role === 'RESIDENT' && config.adminResidentProfile?.name
-                      ? config.adminResidentProfile.name
-                      : (currentResidentObj?.name || user?.displayName || 'ساكن'))}
+                    : (role === 'RESIDENT' && config.adminResidentProfile?.name 
+                      ? config.adminResidentProfile.name 
+                      : (currentResidentObj?.name || user.displayName))}
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold">
                   ({role === 'ADMIN' ? 'إدارة الملاك' : role === 'ASSISTANT' ? 'المساعد الفني' : role === 'MANAGER' ? 'مدير العمارة' : `ساكن وحدة ${flatNumber || config.adminResidentProfile?.flatNumber || '?'}`})
@@ -2375,6 +2442,17 @@ export default function App() {
 
           {/* Left Section: The ONLY 3 buttons on the top bar + online indicator */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Background Fast Sync indicator */}
+            {isBackgroundSyncing && (
+              <div 
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200/80 animate-pulse shadow-xs"
+                title="جاري تحديث البيانات السحابية في الخلفية بسلاسة دون مقاطعة"
+              >
+                <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
+                <span>مزامنة سريعة...</span>
+              </div>
+            )}
+
             {/* Connection/Sync status indicator badge */}
             <div 
               onClick={triggerBackgroundSync}
@@ -2466,7 +2544,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-900 text-sm">قائمة النظام</h3>
-                    <p className="text-[10px] text-slate-400 font-bold">{config.buildingName || 'اتحاد الملاك'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold">بيراميدز فيو ١</p>
                   </div>
                 </div>
                 <button 
@@ -2478,7 +2556,7 @@ export default function App() {
               </div>
 
               {/* Mode Switch for Admin */}
-              {((user as any)?.role === 'ADMIN' || user?.email === 'admin@altaqwa.com' || config.admins.some(a => a.toLowerCase().trim() === user?.email?.toLowerCase().trim())) && (
+              {(user?.email === 'waheedsamaha8@gmail.com' || (user as any)?.role === 'ADMIN' || config.admins.some(a => a.toLowerCase().trim() === user?.email?.toLowerCase().trim())) && (
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-slate-800">وضع المعاينة والتحكم</span>
@@ -2689,16 +2767,8 @@ export default function App() {
             {/* Logout button in drawer */}
             <div className="pt-4 border-t border-slate-100 mt-4 space-y-2">
               <div className="flex items-center justify-between px-1 text-[11px] text-slate-500 font-bold">
-                <span className="font-extrabold text-slate-800">
-                  {role === 'ASSISTANT'
-                    ? 'المساعد الفني'
-                    : role === 'ADMIN'
-                    ? (config.adminResidentProfile?.name || user?.displayName || 'رئيس الاتحاد')
-                    : (currentResidentObj?.name || user?.displayName || 'ساكن')}
-                </span>
-                <span className="text-[10px] text-blue-900 bg-blue-50 px-2 py-0.5 rounded-full font-bold">
-                  {role === 'ADMIN' ? 'رئيس الاتحاد' : role === 'ASSISTANT' ? 'المساعد الفني' : `شقة ${flatNumber || '?'}`}
-                </span>
+                <span>{role === 'ASSISTANT' ? 'المساعد الفني' : user.displayName}</span>
+                <span>{role === 'ADMIN' ? 'رئيس الاتحاد' : role === 'ASSISTANT' ? 'المساعد الفني' : 'ساكن'}</span>
               </div>
               <button
                 onClick={() => { handleLogout(); setMenuOpen(false); }}
@@ -2721,7 +2791,7 @@ export default function App() {
             <div className="text-right">
               <h3 className="font-extrabold text-xs sm:text-sm mb-0.5 flex items-center gap-1.5">
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>تثبيت تطبيق {config.buildingName || 'اتحاد الملاك'}</span>
+                <span>تثبيت تطبيق بيراميدز فيو ١</span>
               </h3>
               <p className="text-[10px] sm:text-xs text-indigo-200">ثبّت التطبيق على شاشة جوالك الرئيسية لاستخدام سريع ومباشر وإمكانية العمل بدون إنترنت.</p>
             </div>
@@ -2844,7 +2914,7 @@ export default function App() {
                     <h3 className="text-xs sm:text-sm font-black text-blue-950 leading-tight">
                       إحصائية وتقسيم أنواع وحدات العمارة
                     </h3>
-                    <p className="text-[8px] text-slate-400 font-bold">
+                    <p className="text-[10px] text-slate-400 font-bold">
                       عداد وشريط تفاعلي يتغير تلقائياً حسب النشاط
                     </p>
                   </div>
@@ -3410,7 +3480,6 @@ export default function App() {
             }}
             onDeleteRule={handleDeleteRule}
             onOpenEditRulesModal={() => setShowRulesEditModal(true)}
-            onSyncAllToCloud={handleSyncAllToCloud}
           />
         )}
 
@@ -3830,7 +3899,7 @@ export default function App() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-3 text-center">
         <p className="text-[11px] text-slate-500 font-extrabold">
-          مع تحيات اتحاد ملاك {config.buildingName || 'عمارة التقوى'}
+          مع تحيات اتحاد ملاك بيراميدز فيو ١
         </p>
       </footer>
     </div>

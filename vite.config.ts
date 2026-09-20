@@ -8,11 +8,6 @@ import { VitePWA } from 'vite-plugin-pwa';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure base to be relative './' so the app works identically on:
-// 1. Root domain deployments (e.g. AI Studio, Cloud Run, custom domain)
-// 2. Subpath deployments (e.g. GitHub Pages https://<user>.github.io/<repo>/)
-const isGhPages = process.env.GITHUB_PAGES === 'true';
-
 export default defineConfig(() => {
   return {
     base: './',
@@ -23,10 +18,10 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
-          id: './',
-          name: 'اتحاد الملاك',
-          short_name: 'اتحاد الملاك',
-          description: 'نظام ذكي متكامل لإدارة شؤون وماليات اتحاد الملاك.',
+          id: '/',
+          name: 'اتحاد ملاك بيراميدز فيو ١ - رئيس الاتحاد وحيد سماحة',
+          short_name: 'بيراميدز فيو ١',
+          description: 'نظام ذكي متكامل لإدارة عمارة بيراميدز فيو ١ ومتابعة الاشتراكات والتحصيلات والمصروفات - رئيس الاتحاد وحيد سماحة.',
           theme_color: '#1e3a8a',
           background_color: '#f8fafc',
           display: 'standalone',
@@ -36,25 +31,25 @@ export default defineConfig(() => {
           lang: 'ar',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: './pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: 'pwa-512x512.png',
+              src: './pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: 'pwa-maskable-512x512.png',
+              src: './pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
             },
             {
-              src: 'icon.svg',
+              src: './icon.svg',
               sizes: '192x192 512x512',
               type: 'image/svg+xml',
               purpose: 'any',

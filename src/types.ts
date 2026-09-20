@@ -85,8 +85,6 @@ export interface AssistantConfig {
 }
 
 export interface AppConfig {
-  buildingName?: string;
-  adminSecurityCode?: string; // e.g. "admin123"
   expenseTypes: string[];
   paymentTypes: string[];
   activityTypes: string[];

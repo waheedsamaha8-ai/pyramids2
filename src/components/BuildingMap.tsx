@@ -190,7 +190,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
 
     const generateText = (recipientName: string, recipientRole: string) => {
       if (isPaid) {
-        let msg = `💐 *اتحاد ملاك العمارة*\n`;
+        let msg = `💐 *اتحاد ملاك عمارة بيراميدز فيو ١*\n`;
         msg += `-----------------------------------\n`;
         msg += `🧾 *إيصال سداد إلكتروني معتمد*\n`;
         msg += `🔢 *رقم الإيصال:* ${receiptNum}\n`;
@@ -207,10 +207,10 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         }
         msg += `-----------------------------------\n`;
         msg += `شاكرين لكم حسن تعاونكم وحرصكم الدائم على خدمات وصيانة العمارة.\n`;
-        msg += `إدارة اتحاد الملاك`;
+        msg += `إدارة اتحاد ملاك بيراميدز فيو ١`;
         return msg;
       } else {
-        let msg = `🏢 *اتحاد ملاك العمارة*\n`;
+        let msg = `🏢 *اتحاد ملاك عمارة بيراميدز فيو ١*\n`;
         msg += `-----------------------------------\n`;
         msg += `📄 *إشعار مطالبة إلكتروني*\n`;
         msg += `🗓 *عن شهر:* ${monthName} ${currentYear}\n\n`;
@@ -228,7 +228,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         msg += `-----------------------------------\n`;
         msg += `يرجى التكرم بالمبادرة بسداد المستحقات لدعم أداء ورعاية العمارة.\n`;
         msg += `مع جزيل الشكر والتقدير.\n`;
-        msg += `إدارة اتحاد الملاك`;
+        msg += `إدارة اتحاد ملاك بيراميدز فيو ١`;
         return msg;
       }
     };
@@ -314,7 +314,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
 
     ctx.font = 'bold 12.5px system-ui, -apple-system, sans-serif';
     ctx.fillStyle = isPaid ? '#a7f3d0' : '#bfdbfe';
-    ctx.fillText('اتحاد ملاك العمارة', width - 44, 82);
+    ctx.fillText('اتحاد ملاك عمارة بيراميدز فيو ١', width - 44, 82);
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 10.5px system-ui, -apple-system, sans-serif';
@@ -458,7 +458,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     ctx.fillStyle = '#64748b';
     ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('تم إصدار هذا التقرير إلكترونياً بواسطة نظام إدارة اتحاد الملاك', width / 2, y);
+    ctx.fillText('تم إصدار هذا التقرير إلكترونياً بواسطة نظام إدارة اتحاد ملاك عمارة بيراميدز فيو ١', width / 2, y);
 
     return canvas;
   };
@@ -495,7 +495,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                 await navigator.share({
                   files: [file],
                   title: `إيصال شقة ${flatNum}`,
-                  text: `إيصال شقة ${flatNum} - اتحاد ملاك العمارة`,
+                  text: `إيصال شقة ${flatNum} - اتحاد ملاك بيراميدز فيو ١`,
                 });
               } catch (shareErr) {
                 // User closed native share sheet
@@ -522,7 +522,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     const paidAmt = currentMonthPayment?.amount || monthlyFee;
     const receiptNum = `REC-${resident.flatNumber}-${selectedMonth}${currentYear}`;
 
-    let text = `اتحاد ملاك العمارة\n`;
+    let text = `اتحاد ملاك عمارة بيراميدز فيو ١\n`;
     text += isPaid ? `إيصال سداد إلكتروني معتمد (رقم ${receiptNum})\n` : `إشعار مطالبة إلكتروني عن شهر ${monthName} ${currentYear}\n`;
     text += `الوحدة: شقة ${resident.flatNumber} - ${resident.name}\n`;
     text += `قيمة الاشتراك: ${monthlyFee} ج.م - الحالة: ${currentMonthStatus}\n`;
@@ -791,7 +791,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                           <h4 className="text-xs font-black text-slate-900">
                             {financials.currentMonthStatus === 'مسدد' ? 'إيصال سداد إلكتروني معتمد' : 'إشعار مطالبة إلكتروني'}
                           </h4>
-                          <span className="text-[9px] text-slate-400 font-bold">اتحاد ملاك العمارة</span>
+                          <span className="text-[9px] text-slate-400 font-bold">اتحاد ملاك عمارة بيراميدز فيو ١</span>
                         </div>
                       </div>
                       

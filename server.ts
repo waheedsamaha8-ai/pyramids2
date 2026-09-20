@@ -38,7 +38,7 @@ async function startServer() {
           {
             email: 'waheedsamaha8@gmail.com',
             password: 'admin123',
-            name: 'المستشار وحيد سماحة (رئيس الاتحاد)',
+            name: 'وحيد سماحة (رئيس الاتحاد)',
             phone: '',
             role: 'ADMIN',
             createdAt: new Date().toISOString()
@@ -53,7 +53,7 @@ async function startServer() {
         parsed.unshift({
           email: 'waheedsamaha8@gmail.com',
           password: 'admin123',
-          name: 'المستشار وحيد سماحة (رئيس الاتحاد)',
+          name: 'وحيد سماحة (رئيس الاتحاد)',
           phone: '',
           role: 'ADMIN',
           createdAt: new Date().toISOString()
@@ -67,7 +67,7 @@ async function startServer() {
         {
           email: 'waheedsamaha8@gmail.com',
           password: 'admin123',
-          name: 'المستشار وحيد سماحة (رئيس الاتحاد)',
+          name: 'وحيد سماحة (رئيس الاتحاد)',
           phone: '',
           role: 'ADMIN'
         }
@@ -282,7 +282,7 @@ async function startServer() {
           success: true,
           role: 'ADMIN',
           email: adminMatch.email,
-          name: adminMatch.name || 'المستشار وحيد سماحة (رئيس الاتحاد)',
+          name: adminMatch.name || 'وحيد سماحة (رئيس الاتحاد)',
         });
       }
 

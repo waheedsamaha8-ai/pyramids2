@@ -17,13 +17,28 @@ import {
 } from '../types';
 import { fetchAllJoinRequests } from './authStore';
 
-let currentAccessToken: string | null = typeof window !== 'undefined' 
-  ? (localStorage.getItem('google_access_token') || (localStorage.getItem('custom_user_session') ? 'local-token' : null)) 
-  : null;
-let spreadsheetId: string | null = typeof window !== 'undefined' 
-  ? localStorage.getItem('sheets_db_spreadsheet_id') 
-  : null;
+let currentAccessToken: string | null = null;
+let spreadsheetId: string | null = null;
 let sheetIds: { [title: string]: number } = {};
+
+export interface DriveFoldersMap {
+  rootFolderId: string;
+  rootFolderUrl: string;
+  sheetsFolderId: string;
+  sheetsFolderUrl: string;
+  receiptsFolderId: string;
+  receiptsFolderUrl: string;
+  expensesFolderId: string;
+  expensesFolderUrl: string;
+  complaintsFolderId: string;
+  complaintsFolderUrl: string;
+  chatFolderId: string;
+  chatFolderUrl: string;
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+}
+
+let cachedDriveFolders: DriveFoldersMap | null = null;
 
 /**
  * Safely parses any formatted or unformatted number string returned from Google Sheets.
@@ -202,70 +217,6 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
   return response.json();
 }
 
-// Main and attachments Google Drive folder IDs
-let mainDriveFolderId: string | null = localStorage.getItem('google_drive_folder_id') || null;
-let attachmentsDriveFolderId: string | null = localStorage.getItem('google_drive_attachments_folder_id') || null;
-
-export function getDriveFolderId(): string | null {
-  return mainDriveFolderId || localStorage.getItem('google_drive_folder_id');
-}
-
-export function getAttachmentsFolderId(): string | null {
-  return attachmentsDriveFolderId || localStorage.getItem('google_drive_attachments_folder_id') || getDriveFolderId();
-}
-
-export function getDriveFolderUrl(): string | null {
-  const id = getDriveFolderId();
-  return id ? `https://drive.google.com/drive/folders/${id}` : null;
-}
-
-export function getSpreadsheetUrl(): string | null {
-  const sId = getSpreadsheetId();
-  return sId && sId !== 'local-resident-spreadsheet' ? `https://docs.google.com/spreadsheets/d/${sId}/edit` : null;
-}
-
-// Search or create Google Drive Folder for application documents
-export async function getOrCreateDriveFolder(folderName = 'اتحاد الملاك', parentFolderId?: string): Promise<string | null> {
-  if (!currentAccessToken || currentAccessToken === 'local-token') return null;
-  try {
-    let q = `name='${folderName.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-    if (parentFolderId) {
-      q += ` and '${parentFolderId}' in parents`;
-    }
-    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,parents)`;
-    const result = await apiFetch(searchUrl);
-    if (result?.files && Array.isArray(result.files) && result.files.length > 0) {
-      const foundId = result.files[0].id;
-      if (folderName === 'اتحاد الملاك') {
-        mainDriveFolderId = foundId;
-        localStorage.setItem('google_drive_folder_id', foundId);
-      }
-      return foundId;
-    }
-    const createUrl = 'https://www.googleapis.com/drive/v3/files';
-    const metadata: any = {
-      name: folderName,
-      mimeType: 'application/vnd.google-apps.folder',
-    };
-    if (parentFolderId) {
-      metadata.parents = [parentFolderId];
-    }
-    const createResult = await apiFetch(createUrl, {
-      method: 'POST',
-      body: JSON.stringify(metadata),
-    });
-    const createdId = createResult?.id || null;
-    if (createdId && folderName === 'اتحاد الملاك') {
-      mainDriveFolderId = createdId;
-      localStorage.setItem('google_drive_folder_id', createdId);
-    }
-    return createdId;
-  } catch (err) {
-    console.warn('Could not create/find Drive folder:', err);
-    return null;
-  }
-}
-
 // 1. Search for existing spreadsheet or create one
 export async function initializeSpreadsheet(): Promise<string> {
   checkAuth();
@@ -295,90 +246,37 @@ export async function initializeSpreadsheet(): Promise<string> {
     return sId;
   }
   
-  // Ensure the primary Google Drive folder "اتحاد الملاك" exists
-  const driveFolderId = await getOrCreateDriveFolder('اتحاد الملاك');
-  if (driveFolderId) {
-    mainDriveFolderId = driveFolderId;
-    localStorage.setItem('google_drive_folder_id', driveFolderId);
-    // Ensure attachments subfolder exists inside "اتحاد الملاك"
-    try {
-      const attFolderId = await getOrCreateDriveFolder('الصور والمرفقات والإيصالات', driveFolderId);
-      if (attFolderId) {
-        attachmentsDriveFolderId = attFolderId;
-        localStorage.setItem('google_drive_attachments_folder_id', attFolderId);
-      }
-    } catch (e) {
-      console.warn('Could not create attachments subfolder:', e);
-    }
-  }
-
-  // Retrieve custom building name if configured
-  let buildingName = 'اتحاد الملاك';
-  try {
-    const raw = localStorage.getItem('custom_app_config') || localStorage.getItem('cache_config');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.buildingName) buildingName = parsed.buildingName;
-    }
-  } catch {}
-
-  // Helper to ensure spreadsheet is located inside the Drive folder
-  const ensureInsideFolder = async (fileId: string) => {
-    if (!driveFolderId || !fileId) return;
-    try {
-      await apiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${driveFolderId}&fields=id,parents`, {
-        method: 'PATCH',
-      });
-    } catch (e) {
-      console.warn('Could not verify/add spreadsheet inside folder:', e);
-    }
-  };
-
   // Check if we have a stored spreadsheet ID from previous sessions
   const storedId = localStorage.getItem('sheets_db_spreadsheet_id');
   if (storedId && storedId !== 'local-resident-spreadsheet') {
     spreadsheetId = storedId;
     try {
       await fetchSheetMetadata();
-      await ensureInsideFolder(storedId);
+      ensureDriveFoldersStructure().catch(() => {});
       return storedId;
     } catch (err) {
       console.warn('Could not verify cached spreadsheet ID, searching Drive:', err);
     }
   }
 
-  // Search for spreadsheet under general "اتحاد الملاك - قاعدة البيانات", "اتحاد الملاك", or custom building name
-  const dbTitles = [
-    'اتحاد الملاك - قاعدة البيانات',
-    'اتحاد الملاك',
-    `${buildingName} - قاعدة البيانات`,
-    'Pyramids View 1 - Management Database'
-  ];
-
-  for (const title of dbTitles) {
-    try {
-      const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(title)}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false&fields=files(id,name)`;
-      const searchResult = await apiFetch(searchUrl);
-      
-      if (searchResult?.files && Array.isArray(searchResult.files) && searchResult.files.length > 0) {
-        const sId = searchResult.files[0].id;
-        spreadsheetId = sId;
-        localStorage.setItem('sheets_db_spreadsheet_id', sId);
-        await fetchSheetMetadata();
-        await ensureInsideFolder(sId);
-        return sId;
-      }
-    } catch (e) {
-      console.warn('Search query error:', e);
-    }
+  // Search for file named "Pyramids View 1 - Management Database"
+  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='Pyramids View 1 - Management Database' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false&fields=files(id,name)`;
+  const searchResult = await apiFetch(searchUrl);
+  
+  if (searchResult?.files && Array.isArray(searchResult.files) && searchResult.files.length > 0) {
+    const sId = searchResult.files[0].id;
+    spreadsheetId = sId;
+    localStorage.setItem('sheets_db_spreadsheet_id', sId);
+    await fetchSheetMetadata();
+    ensureDriveFoldersStructure().catch(() => {});
+    return sId;
   }
   
   // Create spreadsheet if not found
   const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
-  const newTitle = 'اتحاد الملاك - قاعدة البيانات';
   const body = {
     properties: {
-      title: newTitle,
+      title: 'Pyramids View 1 - Management Database',
     },
     sheets: [
       { properties: { title: 'Config' } },
@@ -415,9 +313,6 @@ export async function initializeSpreadsheet(): Promise<string> {
 
   spreadsheetId = sId;
   localStorage.setItem('sheets_db_spreadsheet_id', sId);
-
-  // Move the newly created spreadsheet directly into the 'اتحاد الملاك' Google Drive folder
-  await ensureInsideFolder(sId);
   
   // Map sheetIds safely
   if (Array.isArray(createResult?.sheets)) {
@@ -434,6 +329,7 @@ export async function initializeSpreadsheet(): Promise<string> {
   
   // Seed initial data
   await seedInitialData();
+  ensureDriveFoldersStructure().catch(() => {});
   return sId;
 }
 
@@ -549,44 +445,16 @@ async function ensureRequiredSheets() {
 async function seedInitialData() {
   if (!spreadsheetId) return;
   
-  let customBuildingName = 'اتحاد الملاك';
-  let customAdminCode = 'admin123';
-  let customAdmins = 'admin@altaqwa.com';
-  let customAdminProfile: any = {
-    flatNumber: 101,
-    name: 'محمد احمد (رئيس الاتحاد)',
-    phone: '',
-    activityType: 'سكني',
-    ownershipType: 'تمليك',
-    monthlyFee: 400,
-    initialBalance: 0,
-    notes: 'رئيس اتحاد الملاك',
-  };
-
-  try {
-    const raw = localStorage.getItem('custom_app_config') || localStorage.getItem('cache_config');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.buildingName) customBuildingName = parsed.buildingName;
-      if (parsed.adminSecurityCode) customAdminCode = parsed.adminSecurityCode;
-      if (parsed.admins && Array.isArray(parsed.admins)) customAdmins = parsed.admins.join(',');
-      if (parsed.adminResidentProfile) customAdminProfile = { ...customAdminProfile, ...parsed.adminResidentProfile };
-    }
-  } catch {}
-
   const configValues = [
     ['Key', 'Value'],
-    ['buildingName', customBuildingName],
-    ['adminSecurityCode', customAdminCode],
     ['expenseTypes', 'صيانة,كهرباء,مياه,أمن ونظافة,مصاعد,أخرى'],
     ['paymentTypes', 'اشتراك شهري,صيانة طارئة,تحصيلات اخرى'],
     ['activityTypes', 'سكني,سكني مغلق,مفروش,إداري,تجاري'],
-    ['admins', customAdmins],
+    ['admins', 'waheedsamaha8@gmail.com'], // default admin from the context email
     ['managers', ''],
     ['accountingStartDate', '2026-01-01'],
     ['defaultMonthlyFee', '400'],
     ['activityDefaultFees', JSON.stringify({ 'سكني': 400, 'سكني مغلق': 200, 'مفروش': 600, 'إداري': 800, 'تجاري': 500 })],
-    ['adminResidentProfile', JSON.stringify(customAdminProfile)],
   ];
 
   const residentValues = [
@@ -694,7 +562,7 @@ export async function getAppConfig(): Promise<AppConfig> {
 
   const defaultAdminProfile: AdminResidentProfile = {
     flatNumber: 207,
-    name: 'محمد احمد (رئيس الاتحاد)',
+    name: 'وحيد سماحة (رئيس الاتحاد)',
     phone: '',
     activityType: 'سكني',
     ownershipType: 'تمليك',
@@ -704,12 +572,10 @@ export async function getAppConfig(): Promise<AppConfig> {
   };
 
   const config: AppConfig = {
-    buildingName: 'عمارة التقوى',
-    adminSecurityCode: 'admin123',
     expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
     paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
     activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري'],
-    admins: ['admin@altaqwa.com'],
+    admins: ['waheedsamaha8@gmail.com'],
     managers: [],
     accountingStartDate: '2026-01-01',
     defaultMonthlyFee: 400,
@@ -733,8 +599,6 @@ export async function getAppConfig(): Promise<AppConfig> {
     rows.forEach((row: string[]) => {
       if (!Array.isArray(row) || row.length < 2) return;
       const [key, value] = row;
-      if (key === 'buildingName' && value) config.buildingName = value.trim();
-      if (key === 'adminSecurityCode' && value) config.adminSecurityCode = value.trim();
       if (key === 'expenseTypes') config.expenseTypes = value.split(',').filter(Boolean);
       if (key === 'paymentTypes') config.paymentTypes = value.split(',').filter(Boolean);
       if (key === 'activityTypes') config.activityTypes = value.split(',').filter(Boolean);
@@ -801,8 +665,6 @@ export async function saveAppConfig(config: AppConfig) {
 
   const values = [
     ['Key', 'Value'],
-    ['buildingName', config.buildingName || 'عمارة التقوى'],
-    ['adminSecurityCode', config.adminSecurityCode || 'admin123'],
     ['expenseTypes', config.expenseTypes.join(',')],
     ['paymentTypes', config.paymentTypes.join(',')],
     ['activityTypes', config.activityTypes.join(',')],
@@ -1526,10 +1388,198 @@ async function deleteSheetRow(sheetTitle: string, rowIndex: number) {
   });
 }
 
+// 2. Google Drive Folder & File Management Service
+
+export function getCachedDriveFolders(): DriveFoldersMap | null {
+  if (cachedDriveFolders) return cachedDriveFolders;
+  try {
+    const raw = localStorage.getItem('pyramids_drive_folders_v1');
+    if (raw) {
+      cachedDriveFolders = JSON.parse(raw);
+      return cachedDriveFolders;
+    }
+  } catch {
+    // Ignore error
+  }
+  return null;
+}
+
+export async function ensureDriveFoldersStructure(): Promise<DriveFoldersMap> {
+  const ROOT_FOLDER_NAME = 'اتحاد ملاك بيراميدز فيو ١ - Pyramids View 1';
+  const SUBFOLDERS: Record<string, string> = {
+    sheets: 'قواعد البيانات والجداول',
+    receipts: 'صور إيصالات السداد',
+    expenses: 'صور فواتير المصروفات',
+    complaints: 'صور الشكاوى والصيانة',
+    chat: 'صور ومرفقات المحادثات',
+  };
+
+  if (!currentAccessToken || currentAccessToken === 'local-token') {
+    const fallbackMap: DriveFoldersMap = {
+      rootFolderId: 'local-root-folder',
+      rootFolderUrl: 'https://drive.google.com/',
+      sheetsFolderId: 'local-sheets-folder',
+      sheetsFolderUrl: 'https://drive.google.com/',
+      receiptsFolderId: 'local-receipts-folder',
+      receiptsFolderUrl: 'https://drive.google.com/',
+      expensesFolderId: 'local-expenses-folder',
+      expensesFolderUrl: 'https://drive.google.com/',
+      complaintsFolderId: 'local-complaints-folder',
+      complaintsFolderUrl: 'https://drive.google.com/',
+      chatFolderId: 'local-chat-folder',
+      chatFolderUrl: 'https://drive.google.com/',
+      spreadsheetId: spreadsheetId || 'local-spreadsheet',
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId || 'local-spreadsheet'}/edit`,
+    };
+    cachedDriveFolders = fallbackMap;
+    localStorage.setItem('pyramids_drive_folders_v1', JSON.stringify(fallbackMap));
+    return fallbackMap;
+  }
+
+  try {
+    // 1. Find or create Root Folder
+    let rootFolderId = '';
+    let rootFolderUrl = '';
+    const searchRootQ = `name='${ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const rootSearchRes = await apiFetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchRootQ)}&fields=files(id,name,webViewLink)`);
+    if (rootSearchRes?.files && rootSearchRes.files.length > 0) {
+      rootFolderId = rootSearchRes.files[0].id;
+      rootFolderUrl = rootSearchRes.files[0].webViewLink || `https://drive.google.com/drive/folders/${rootFolderId}`;
+    } else {
+      const createRootRes = await apiFetch('https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: ROOT_FOLDER_NAME,
+          mimeType: 'application/vnd.google-apps.folder',
+        }),
+      });
+      rootFolderId = createRootRes.id;
+      rootFolderUrl = createRootRes.webViewLink || `https://drive.google.com/drive/folders/${rootFolderId}`;
+    }
+
+    // 2. Find or create Subfolders inside Root Folder
+    const subfolderMap: Record<string, { id: string; url: string }> = {};
+
+    for (const [key, folderName] of Object.entries(SUBFOLDERS)) {
+      const searchSubQ = `name='${folderName}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+      const subSearchRes = await apiFetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchSubQ)}&fields=files(id,name,webViewLink)`);
+      if (subSearchRes?.files && subSearchRes.files.length > 0) {
+        subfolderMap[key] = {
+          id: subSearchRes.files[0].id,
+          url: subSearchRes.files[0].webViewLink || `https://drive.google.com/drive/folders/${subSearchRes.files[0].id}`,
+        };
+      } else {
+        const createSubRes = await apiFetch('https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [rootFolderId],
+          }),
+        });
+        subfolderMap[key] = {
+          id: createSubRes.id,
+          url: createSubRes.webViewLink || `https://drive.google.com/drive/folders/${createSubRes.id}`,
+        };
+      }
+    }
+
+    // 3. Move/Place Spreadsheet into 'sheets' subfolder if needed
+    if (spreadsheetId && subfolderMap.sheets?.id) {
+      try {
+        await apiFetch(`https://www.googleapis.com/drive/v3/files/${spreadsheetId}?addParents=${subfolderMap.sheets.id}&fields=id,parents`, {
+          method: 'PATCH',
+        });
+      } catch (e) {
+        console.warn('Could not update spreadsheet parent folder:', e);
+      }
+    }
+
+    const result: DriveFoldersMap = {
+      rootFolderId,
+      rootFolderUrl,
+      sheetsFolderId: subfolderMap.sheets?.id || rootFolderId,
+      sheetsFolderUrl: subfolderMap.sheets?.url || rootFolderUrl,
+      receiptsFolderId: subfolderMap.receipts?.id || rootFolderId,
+      receiptsFolderUrl: subfolderMap.receipts?.url || rootFolderUrl,
+      expensesFolderId: subfolderMap.expenses?.id || rootFolderId,
+      expensesFolderUrl: subfolderMap.expenses?.url || rootFolderUrl,
+      complaintsFolderId: subfolderMap.complaints?.id || rootFolderId,
+      complaintsFolderUrl: subfolderMap.complaints?.url || rootFolderUrl,
+      chatFolderId: subfolderMap.chat?.id || rootFolderId,
+      chatFolderUrl: subfolderMap.chat?.url || rootFolderUrl,
+      spreadsheetId: spreadsheetId || '',
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+    };
+
+    cachedDriveFolders = result;
+    localStorage.setItem('pyramids_drive_folders_v1', JSON.stringify(result));
+    return result;
+  } catch (err) {
+    console.error('Error ensuring Google Drive folders:', err);
+    // Return cached or fallback
+    const cached = getCachedDriveFolders();
+    if (cached) return cached;
+    return {
+      rootFolderId: '',
+      rootFolderUrl: 'https://drive.google.com/',
+      sheetsFolderId: '',
+      sheetsFolderUrl: 'https://drive.google.com/',
+      receiptsFolderId: '',
+      receiptsFolderUrl: 'https://drive.google.com/',
+      expensesFolderId: '',
+      expensesFolderUrl: 'https://drive.google.com/',
+      complaintsFolderId: '',
+      complaintsFolderUrl: 'https://drive.google.com/',
+      chatFolderId: '',
+      chatFolderUrl: 'https://drive.google.com/',
+      spreadsheetId: spreadsheetId || '',
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+    };
+  }
+}
+
+export async function getCachedOrEnsureDriveFolders(forceRefresh = false): Promise<DriveFoldersMap | null> {
+  if (!forceRefresh) {
+    const cached = getCachedDriveFolders();
+    if (cached && cached.rootFolderId && cached.spreadsheetId) return cached;
+  }
+  if (!currentAccessToken || currentAccessToken === 'local-token') {
+    return getCachedDriveFolders();
+  }
+  return await ensureDriveFoldersStructure();
+}
+
 // 2. Google Drive File Upload Service
-export async function uploadFileToDrive(fileName: string, base64Data: string, mimeType: string = 'image/jpeg', parentFolderId?: string): Promise<string> {
+export async function uploadFileToDrive(
+  fileName: string, 
+  base64Data: string, 
+  mimeType: string = 'image/jpeg',
+  category?: 'receipts' | 'expenses' | 'complaints' | 'chat' | 'general'
+): Promise<string> {
   checkAuth();
   
+  // Try to resolve target folder from category or fileName
+  let parentFolderId: string | undefined = undefined;
+  try {
+    const folders = await getCachedOrEnsureDriveFolders();
+    if (folders) {
+      if (category === 'receipts' || fileName.startsWith('Receipt_')) {
+        parentFolderId = folders.receiptsFolderId;
+      } else if (category === 'expenses' || fileName.startsWith('Invoice_')) {
+        parentFolderId = folders.expensesFolderId;
+      } else if (category === 'complaints' || fileName.startsWith('Complaint_')) {
+        parentFolderId = folders.complaintsFolderId;
+      } else if (category === 'chat' || fileName.startsWith('Chat_')) {
+        parentFolderId = folders.chatFolderId;
+      } else {
+        parentFolderId = folders.rootFolderId;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not resolve Drive target folder, uploading to root:', e);
+  }
+
   // Convert base64 back to raw binary data
   const base64Content = base64Data.split(',')[1] || base64Data;
   const byteCharacters = atob(base64Content);
@@ -1543,15 +1593,12 @@ export async function uploadFileToDrive(fileName: string, base64Data: string, mi
   // Drive Multipart Upload endpoint
   const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
   
-  // Place uploads directly in the attachments folder inside 'اتحاد الملاك', or main 'اتحاد الملاك' folder
-  const targetParent = parentFolderId || getAttachmentsFolderId() || getDriveFolderId();
-
   const metadata: any = {
     name: fileName,
     mimeType: mimeType,
   };
-  if (targetParent) {
-    metadata.parents = [targetParent];
+  if (parentFolderId && parentFolderId !== 'local-root-folder' && !parentFolderId.startsWith('local-')) {
+    metadata.parents = [parentFolderId];
   }
   
   const form = new FormData();
@@ -2174,153 +2221,5 @@ export async function deleteJoinRequestSheet(id: string): Promise<void> {
   
   const sheetRowNumber = idx + 1; // offset
   await deleteSheetRow('JoinRequests', sheetRowNumber);
-}
-
-// ----------------------------------------------------
-// Bulk Setters for full sync and zero-data-loss persistence
-// ----------------------------------------------------
-
-export async function setAllPaymentsSheet(payments: Payment[]): Promise<void> {
-  await clearSheetRange('Payments!A1:M3000');
-  const values = [
-    ['ID', 'Year', 'Month', 'ResidentID', 'ResidentName', 'FlatNumber', 'PaymentType', 'Amount', 'ReceiptNumber', 'Notes', 'FileID', 'Date', 'IsManuallyPaid'],
-    ...payments.map(p => [
-      p.id,
-      p.year.toString(),
-      p.month,
-      p.residentId,
-      p.residentName,
-      p.flatNumber.toString(),
-      p.paymentType,
-      p.amount.toString(),
-      p.receiptNumber || '',
-      p.notes || '',
-      p.fileId || '',
-      p.date || '',
-      p.isManuallyPaid ? 'TRUE' : 'FALSE',
-    ])
-  ];
-  await writeSheetRange('Payments!A1', values);
-  cache.payments.expiry = 0;
-}
-
-export async function setAllExpensesSheet(expenses: Expense[]): Promise<void> {
-  await clearSheetRange('Expenses!A1:H2000');
-  const values = [
-    ['ID', 'Year', 'Month', 'ExpenseType', 'Amount', 'Notes', 'FileID', 'Date'],
-    ...expenses.map(e => [
-      e.id,
-      e.year.toString(),
-      e.month,
-      e.expenseType,
-      e.amount.toString(),
-      e.notes || '',
-      e.fileId || '',
-      e.date || '',
-    ])
-  ];
-  await writeSheetRange('Expenses!A1', values);
-  cache.expenses.expiry = 0;
-}
-
-export async function setAllCraftsmenSheet(craftsmen: Craftsman[]): Promise<void> {
-  await clearSheetRange('Craftsmen!A1:G2000');
-  const values = [
-    ['ID', 'Name', 'Specialty', 'Phone', 'Notes', 'AddedBy', 'Comments'],
-    ...craftsmen.map(c => [
-      c.id,
-      c.name,
-      c.specialty,
-      c.phone,
-      c.notes || '',
-      c.addedBy || '',
-      c.comments && c.comments.length > 0 ? JSON.stringify(c.comments) : '[]',
-    ])
-  ];
-  await writeSheetRange('Craftsmen!A1', values);
-  cache.craftsmen.expiry = 0;
-}
-
-// Complete Direct Sync of all local data tables into Google Sheets
-export async function syncAllLocalDataToGoogleSheets(data: {
-  residents?: Resident[];
-  payments?: Payment[];
-  expenses?: Expense[];
-  rules?: string[];
-  config?: AppConfig;
-  craftsmen?: Craftsman[];
-  messages?: ChatMessage[];
-  decisions?: AdminDecision[];
-  polls?: Poll[];
-  complaints?: PublicComplaint[];
-  maintenanceRequests?: MaintenanceRequest[];
-  events?: BuildingEvent[];
-}): Promise<{ success: boolean; syncedCount: number; message: string }> {
-  checkAuth();
-  if (!spreadsheetId) {
-    await initializeSpreadsheet();
-  }
-  await ensureRequiredSheets();
-
-  let count = 0;
-  if (data.config) {
-    await saveAppConfig(data.config);
-    count++;
-  }
-  if (data.residents && data.residents.length > 0) {
-    await setAllResidentsSheet(data.residents);
-    count += data.residents.length;
-  }
-  if (data.payments && data.payments.length > 0) {
-    await setAllPaymentsSheet(data.payments);
-    count += data.payments.length;
-  }
-  if (data.expenses && data.expenses.length > 0) {
-    await setAllExpensesSheet(data.expenses);
-    count += data.expenses.length;
-  }
-  if (data.rules && data.rules.length > 0) {
-    await saveBuildingRulesSheet(data.rules);
-    count++;
-  }
-  if (data.craftsmen && data.craftsmen.length > 0) {
-    await setAllCraftsmenSheet(data.craftsmen);
-    count += data.craftsmen.length;
-  }
-  if (data.messages && data.messages.length > 0) {
-    await setAllChatMessagesSheet(data.messages);
-    count += data.messages.length;
-  }
-  if (data.decisions && data.decisions.length > 0) {
-    await setAllAdminDecisionsSheet(data.decisions);
-    count += data.decisions.length;
-  }
-  if (data.polls && data.polls.length > 0) {
-    await setAllPollsSheet(data.polls);
-    count += data.polls.length;
-  }
-  if (data.complaints && data.complaints.length > 0) {
-    await setAllComplaintsSheet(data.complaints);
-    count += data.complaints.length;
-  }
-  if (data.maintenanceRequests && data.maintenanceRequests.length > 0) {
-    await setAllMaintenanceRequestsSheet(data.maintenanceRequests);
-    count += data.maintenanceRequests.length;
-  }
-  if (data.events && data.events.length > 0) {
-    await setAllEventsSheet(data.events);
-    count += data.events.length;
-  }
-
-  // Clear caches so fresh data is read
-  Object.keys(cache).forEach(key => {
-    (cache as any)[key].expiry = 0;
-  });
-
-  return {
-    success: true,
-    syncedCount: count,
-    message: `تم حفظ وتحديث ${count} سجلاً وعنصراً بنجاح في Google Sheets وجوجل درايف!`,
-  };
 }
 

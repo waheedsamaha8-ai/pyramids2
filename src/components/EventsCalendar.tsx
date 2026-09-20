@@ -152,7 +152,7 @@ export const EventsCalendar: React.FC<EventsCalendarProps> = ({
           }
         }}
         title="تقويم الأحداث وجدول المواعيد"
-        description="مواعيد الاجتماعات الدورية، خطط الصيانة، غسيل الخزانات، ومتابعة الفعاليات العامة للعمارة."
+        description="مواعيد الاجتماعات الدورية، خطط الصيانة، غسيل الخزانات، ومتابعة الفعاليات العامة لعمارة بيراميدز فيو ١."
         icon={<CalendarIcon className="w-5 h-5" />}
         badge={`${events.length} فعالية مجدولة`}
         counts={communityCounts || {

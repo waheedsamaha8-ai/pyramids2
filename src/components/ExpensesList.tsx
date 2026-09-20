@@ -808,7 +808,7 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
       >
         {/* Header */}
         <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-6">
-          <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك العمارة</h1>
+          <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك عمارة بيراميدز فيو ١</h1>
           <h2 className="text-base font-bold text-slate-700">
             تقرير ونفقات شهر {monthNamesArabic[new Date().getMonth()]} (السنة المالية {currentYear})
           </h2>
