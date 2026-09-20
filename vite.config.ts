@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig(() => {
   return {
-    base: './',
+    base: '/',
     plugins: [
       react(), 
       tailwindcss(),
@@ -25,31 +25,31 @@ export default defineConfig(() => {
           theme_color: '#1e3a8a',
           background_color: '#f8fafc',
           display: 'standalone',
-          start_url: './',
-          scope: './',
+          start_url: '/',
+          scope: '/',
           dir: 'rtl',
           lang: 'ar',
           icons: [
             {
-              src: './pwa-192x192.png',
+              src: '/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: './pwa-512x512.png',
+              src: '/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: './pwa-maskable-512x512.png',
+              src: '/pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
             },
             {
-              src: './icon.svg',
+              src: '/icon.svg',
               sizes: '192x192 512x512',
               type: 'image/svg+xml',
               purpose: 'any',
