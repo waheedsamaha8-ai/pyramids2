@@ -61,7 +61,7 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 
-import { initAuth, logoutUser } from './services/firebaseConfig';
+import { initAuth, logoutUser, googleSignIn } from './services/firebaseConfig';
 import * as googleApi from './services/googleApi';
 import * as offlineSync from './services/offlineSync';
 import { UserRole, Resident, Payment, Expense, AppNotification, BuildingRules, AppConfig, MaintenanceRequest, Poll, AdminDecision, BuildingEvent, ChatMessage, PublicComplaint, ComplaintComment, FloorConfig, Craftsman, CraftsmanComment } from './types';
@@ -858,6 +858,15 @@ export default function App() {
     try {
       // Find or create Sheets database
       await googleApi.initializeSpreadsheet();
+
+      // Ensure Google Drive folders structure for waheedsamaha8@gmail.com
+      if (accessToken && accessToken !== 'local-token') {
+        try {
+          await googleApi.ensureDriveFoldersStructure();
+        } catch (fErr) {
+          console.warn('Drive folder auto-creation warning in bootstrap:', fErr);
+        }
+      }
       
       // Load configurations to determine user role
       const appConfig = await googleApi.getAppConfig();
@@ -960,6 +969,28 @@ export default function App() {
 
     } catch (err) {
       logError(err, 'refreshAllData');
+    }
+  };
+
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+
+  const handleConnectGoogleDrive = async () => {
+    setIsConnectingGoogle(true);
+    try {
+      const { user: authedUser, accessToken } = await googleSignIn();
+      setUser(authedUser);
+      setToken(accessToken);
+      googleApi.setAccessToken(accessToken);
+      localStorage.setItem('google_access_token', accessToken);
+      localStorage.removeItem('custom_user_session');
+      addNotification('جاري ربط Google Drive', 'تم تسجيل الدخول بنجاح. جاري الآن إنشاء وفحص مجلدات Google Drive وجداول Google Sheets...', 'info');
+      await bootstrapApp(authedUser, accessToken, false);
+      addNotification('تم ربط Google Drive بنجاح', 'تم إنشاء وربط مجلدات Google Drive وجداول Google Sheets بحساب waheedsamaha8@gmail.com بنجاح!', 'success');
+    } catch (err: any) {
+      logError(err, 'handleConnectGoogleDrive');
+      addNotification('خطأ في ربط Google Drive', err?.message || 'تعذر استكمال الربط مع Google حالياً.', 'error');
+    } finally {
+      setIsConnectingGoogle(false);
     }
   };
 
@@ -2841,6 +2872,43 @@ export default function App() {
                 فهمت، إغلاق
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Google Drive & Sheets Integration Alert for Union President if in local mode */}
+        {role === 'ADMIN' && (token === 'local-token' || !token) && (
+          <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white p-3.5 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between border-2 border-blue-500/50 shadow-lg gap-3">
+            <div className="text-right space-y-1">
+              <h3 className="font-black text-xs sm:text-sm flex items-center gap-1.5 text-blue-200">
+                <CloudLightning className="w-4 h-4 text-amber-400" />
+                <span>تنبيه رئيس الاتحاد وحيد سماحة: تفعيل الربط السحابي ومجلدات Google Drive</span>
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-300 font-bold leading-relaxed">
+                أنت الآن مسجل محلياً. لإنشاء مجلدات Google Drive المخصصة تلقائياً (الصور، الإيصالات، الفواتير، الشكاوى) وجداول Google Sheets باسم حسابك المعتمد (<strong className="text-amber-300">waheedsamaha8@gmail.com</strong>):
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleConnectGoogleDrive}
+              disabled={isConnectingGoogle}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-xs flex items-center gap-2 shadow-md transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0 self-stretch sm:self-auto justify-center disabled:opacity-50"
+            >
+              {isConnectingGoogle ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                    <g transform="matrix(1, 0, 0, 1, 0, 0)">
+                      <path fill="#EA4335" d="M20.64 12.2c0-.7-.06-1.36-.18-2H12v3.78h4.84c-.2.11-.2.22-.3.43-.54 1.45-1.8 2.5-3.32 2.5a5.18 5.18 0 0 1-4.85-3.6l-2.63 2.03A10.3 10.3 0 0 0 12 22.36c5.73 0 10.55-1.9 14.07-5.18l-5.43-4.98z" />
+                      <path fill="#4285F4" d="M12 22.36c3.24 0 5.95-1.07 7.93-2.91l-5.43-4.98c-1.5.11-3.04-.15-4.21-.86a5.18 5.18 0 0 1-3.3-3.6L4.35 12.04a10.3 10.3 0 0 0 7.65 10.32z" />
+                      <path fill="#FBBC05" d="M4.35 12.04c-.25-.75-.4-1.55-.4-2.38s.15-1.63.4-2.38L1.72 5.25A10.3 10.3 0 0 0 0 9.66c0 1.63.3 3.19.85 4.63l3.5-3.25z" />
+                      <path fill="#34A853" d="M12 4.14c1.76 0 3.3.61 4.54 1.8l3.4-3.15C17.9 1.07 15.24 0 12 0 7.34 0 3.3 2.7 1.25 6.64l3.5 3.25A5.18 5.18 0 0 1 12 4.14z" />
+                    </g>
+                  </svg>
+                  <span>ربط Google Drive السحابي الآن</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 

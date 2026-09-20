@@ -252,7 +252,11 @@ export async function initializeSpreadsheet(): Promise<string> {
     spreadsheetId = storedId;
     try {
       await fetchSheetMetadata();
-      ensureDriveFoldersStructure().catch(() => {});
+      try {
+        await ensureDriveFoldersStructure();
+      } catch (fErr) {
+        console.warn('Drive folder structure sync warning:', fErr);
+      }
       return storedId;
     } catch (err) {
       console.warn('Could not verify cached spreadsheet ID, searching Drive:', err);
@@ -268,7 +272,11 @@ export async function initializeSpreadsheet(): Promise<string> {
     spreadsheetId = sId;
     localStorage.setItem('sheets_db_spreadsheet_id', sId);
     await fetchSheetMetadata();
-    ensureDriveFoldersStructure().catch(() => {});
+    try {
+      await ensureDriveFoldersStructure();
+    } catch (fErr) {
+      console.warn('Drive folder structure sync warning:', fErr);
+    }
     return sId;
   }
   
@@ -329,7 +337,11 @@ export async function initializeSpreadsheet(): Promise<string> {
   
   // Seed initial data
   await seedInitialData();
-  ensureDriveFoldersStructure().catch(() => {});
+  try {
+    await ensureDriveFoldersStructure();
+  } catch (fErr) {
+    console.warn('Drive folder structure sync warning:', fErr);
+  }
   return sId;
 }
 
@@ -1485,10 +1497,11 @@ export async function ensureDriveFoldersStructure(): Promise<DriveFoldersMap> {
     }
 
     // 3. Move/Place Spreadsheet into 'sheets' subfolder if needed
-    if (spreadsheetId && subfolderMap.sheets?.id) {
+    if (spreadsheetId && subfolderMap.sheets?.id && !spreadsheetId.startsWith('local-')) {
       try {
         await apiFetch(`https://www.googleapis.com/drive/v3/files/${spreadsheetId}?addParents=${subfolderMap.sheets.id}&fields=id,parents`, {
           method: 'PATCH',
+          body: JSON.stringify({}),
         });
       } catch (e) {
         console.warn('Could not update spreadsheet parent folder:', e);

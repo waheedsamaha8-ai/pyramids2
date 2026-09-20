@@ -8,8 +8,13 @@ export const auth = getAuth(app);
 
 export const googleProvider = new GoogleAuthProvider();
 // Add required Google Workspace scopes for sheets and drive
-googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+googleProvider.addScope('https://www.googleapis.com/auth/drive');
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+  login_hint: 'waheedsamaha8@gmail.com'
+});
 
 // Flag to indicate if we are in the middle of a sign-in flow.
 let isSigningIn = false;

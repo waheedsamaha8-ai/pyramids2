@@ -32,8 +32,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   isDarkMode = false,
   onToggleTheme,
 }) => {
+  const isAdmin = role === 'ADMIN';
   const [activeSubTab, setActiveSubTab] = useState<'settings' | 'storage' | 'permissions' | 'types'>('settings');
   const [newRuleInput, setNewRuleInput] = useState('');
+
+  // Automatically reset to settings sub-tab if resident mode
+  useEffect(() => {
+    if (!isAdmin && activeSubTab === 'storage') {
+      setActiveSubTab('settings');
+    }
+  }, [isAdmin, activeSubTab]);
   
   // Google Drive & Sheets Integration State
   const [driveFolders, setDriveFolders] = useState<googleApi.DriveFoldersMap | null>(() => googleApi.getCachedDriveFolders());
@@ -198,8 +206,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     setAssistantName('المساعد الفني');
   };
 
-  const isAdmin = role === 'ADMIN';
-
   // Core update helper
   const updateConfig = (key: keyof AppConfig, updatedList: string[]) => {
     if (!isAdmin) return;
@@ -356,13 +362,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <Calendar className="w-3.5 h-3.5 text-blue-800" />
               <span>إعدادات</span>
             </button>
-            <button
-              onClick={() => setActiveSubTab('storage')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'storage' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              <HardDrive className="w-3.5 h-3.5 text-emerald-700" />
-              <span>سحابة جوجل (Drive & Sheets)</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setActiveSubTab('storage')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'storage' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                <HardDrive className="w-3.5 h-3.5 text-emerald-700" />
+                <span>سحابة جوجل (Drive & Sheets)</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveSubTab('permissions')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'permissions' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
@@ -756,7 +764,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* SUBTAB: GOOGLE DRIVE & GOOGLE SHEETS STORAGE */}
-      {activeSubTab === 'storage' && (
+      {isAdmin && activeSubTab === 'storage' && (
         <div className="space-y-4 text-right">
           {/* Header Card */}
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-xs space-y-4">
