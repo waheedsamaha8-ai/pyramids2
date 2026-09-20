@@ -115,7 +115,7 @@ export async function performFullAppReset(): Promise<void> {
   } catch (err) {
     console.error('Reset error:', err);
   } finally {
-    // Reload safely to root
-    window.location.href = '/';
+    // Reload safely preserving base pathname
+    window.location.reload();
   }
 }

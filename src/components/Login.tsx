@@ -1206,6 +1206,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             type="button"
             onClick={async () => {
               await clearTemporaryCache();
+              if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                for (const r of regs) {
+                  await r.unregister();
+                }
+              }
               window.location.reload();
             }}
             className="mt-1 text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-bold flex items-center gap-1 transition cursor-pointer p-1 rounded-md"
