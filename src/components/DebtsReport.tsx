@@ -91,7 +91,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
     setIsGeneratingImage(true);
     try {
       const dateStr = new Date().toISOString().slice(0, 10);
-      await generateElementImage('debts-printable-area', `كشف_مديونيات_بيراميدز_فيو1_${dateStr}.png`);
+      await generateElementImage('debts-printable-area', `كشف_مديونيات_${dateStr}.png`);
     } catch (e) {
       console.error('Image generation error:', e);
       alert('حدث خطأ أثناء توليد صورة الكشف، يُرجى المحاولة مرة أخرى.');
@@ -400,7 +400,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
       ? 'تراكمي شامل حتى تاريخه' 
       : `للسنة المالية ${selectedYearFilter}`;
 
-    let text = `📋 *كشف مديونيات شواغل عمارة بيراميدز فيو ١ (${yearLabel})*\n`;
+    let text = `📋 *كشف مديونيات شواغل العمارة (${yearLabel})*\n`;
     text += `📅 *تاريخ إصدار الكشف:* ${currentDateStr}\n`;
     text += `⚙️ *تاريخ بدء المحاسبة:* ${accountingStartDate}\n`;
     text += `💰 *إجمالي المديونيات المستحقة:* ${Math.round(stats.totalDebt).toLocaleString()} ج.م\n`;
@@ -422,7 +422,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
       text += `\n   • الاشتراك الشهري: ${item.financials.monthlyFee} ج.م | المسدد: ${Math.round(item.financials.totalPaid).toLocaleString()} ج.م\n\n`;
     });
 
-    text += `🏢 *إدارة اتحاد ملاك بيراميدز فيو ١*`;
+    text += `🏢 *إدارة اتحاد الملاك*`;
 
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -439,7 +439,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
     expectedDues: number,
     totalPaid: number
   ) => {
-    let defaultText = `مساء الخير أستاذ/ ${recipientName}،\nتحية طيبة من إدارة اتحاد ملاك عمارة بيراميدز فيو ١ 🏢\n\n`;
+    let defaultText = `مساء الخير أستاذ/ ${recipientName}،\nتحية طيبة من إدارة اتحاد ملاك العمارة 🏢\n\n`;
     defaultText += `نحيط سيادتكم علماً بأن صافي المديونية المتأخرة على الوحدة رقم (${flatNumber}) يبلغ: *${debtAmount.toLocaleString()} ج.م*.\n`;
     if (carriedBalance !== 0) {
       defaultText += `• يتضمن رصيد سابق مرحل: ${carriedBalance < 0 ? `مديونية سابقة (-${Math.abs(carriedBalance).toLocaleString()} ج.م)` : `فائض سابق (+${carriedBalance.toLocaleString()} ج.م)`}\n`;
@@ -1401,7 +1401,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
       <div id="debts-printable-area" className="printable-area hidden print:block text-right p-6 font-sans" dir="rtl">
         {/* Document Header */}
         <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-6">
-          <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك عمارة بيراميدز فيو ١</h1>
+          <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك العمارة</h1>
           <p className="text-sm font-bold text-slate-600">
             كشف بمديونيات ومستحقات الشواغل المتأخرة {selectedYearFilter === 'all' ? '(شامل تراكمي)' : `(للسنة المالية ${selectedYearFilter})`}
           </p>
@@ -1504,7 +1504,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
 
         {/* Page Footer */}
         <div className="mt-16 text-center text-[10px] text-slate-400 font-semibold">
-          تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة عمارة بيراميدز فيو ١
+          تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة العمارة
         </div>
       </div>
     </div>

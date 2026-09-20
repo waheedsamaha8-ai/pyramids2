@@ -280,7 +280,7 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
         title={activeTab === 'polls' ? 'نظام التصويت واستبيان الملاك' : 'سجل القرارات واللوائح الإدارية'}
         description={
           activeTab === 'polls'
-            ? 'شارك برأيك في استبيانات ومقترحات عمارة بيراميدز فيو ١ بشفافية وديمقراطية لاتخاذ القرارات المشتركة.'
+            ? 'شارك برأيك في استبيانات ومقترحات العمارة بشفافية وديمقراطية لاتخاذ القرارات المشتركة.'
             : 'القرارات الرسمية المعتمدة الصادرة عن اتحاد الملاك والإدارة لتنظيم شؤون العمارة وحقوق وواجبات السكان.'
         }
         icon={activeTab === 'polls' ? <Vote className="w-5 h-5" /> : <Scale className="w-5 h-5" />}
@@ -841,7 +841,7 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
             <div className="py-12 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-[#111a2e]">
               <FileCheck2 className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2 stroke-[1.5]" />
               <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-200">لا توجد قرارات إدارية مسجلة</h4>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-bold">تظهر هنا القرارات الإدارية والتنظيمية المعتمدة لعمارة بيراميدز فيو ١.</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-bold">تظهر هنا القرارات الإدارية والتنظيمية المعتمدة للعمارة.</p>
             </div>
           ) : (
             <div className="space-y-3">

@@ -48,7 +48,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   // Admin Resident Profile state
   const [adminFlatNumber, setAdminFlatNumber] = useState<number | string>(config.adminResidentProfile?.flatNumber || 207);
-  const [adminResidentName, setAdminResidentName] = useState<string>(config.adminResidentProfile?.name || 'وحيد سماحة (رئيس الاتحاد)');
+  const [adminResidentName, setAdminResidentName] = useState<string>(config.adminResidentProfile?.name || 'محمد احمد (رئيس الاتحاد)');
   const [adminResidentPhone, setAdminResidentPhone] = useState<string>(config.adminResidentProfile?.phone || '');
   const [adminActivityType, setAdminActivityType] = useState<string>(config.adminResidentProfile?.activityType || 'سكني');
   const [adminOwnershipType, setAdminOwnershipType] = useState<string>(config.adminResidentProfile?.ownershipType || 'تمليك');
@@ -65,7 +65,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
     if (config.adminResidentProfile) {
       setAdminFlatNumber(config.adminResidentProfile.flatNumber || 207);
-      setAdminResidentName(config.adminResidentProfile.name || 'وحيد سماحة (رئيس الاتحاد)');
+      setAdminResidentName(config.adminResidentProfile.name || 'محمد احمد (رئيس الاتحاد)');
       setAdminResidentPhone(config.adminResidentProfile.phone || '');
       setAdminActivityType(config.adminResidentProfile.activityType || 'سكني');
       setAdminOwnershipType(config.adminResidentProfile.ownershipType || 'تمليك');
@@ -197,7 +197,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
     const profile: AdminResidentProfile = {
       flatNumber: Number(adminFlatNumber) || 207,
-      name: adminResidentName.trim() || 'وحيد سماحة (رئيس الاتحاد)',
+      name: adminResidentName.trim() || 'محمد احمد (رئيس الاتحاد)',
       phone: adminResidentPhone.trim(),
       activityType: adminActivityType || 'سكني',
       ownershipType: adminOwnershipType || 'تمليك',
@@ -409,7 +409,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                     onChange={(e) => setAdminResidentName(e.target.value)}
                     disabled={!isAdmin}
                     className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: وحيد سماحة"
+                    placeholder="مثال: محمد احمد"
                     required
                   />
                   <p className="text-[10px] text-slate-400 font-bold">الاسم الذي يظهر في كشوف السكان</p>
@@ -1196,7 +1196,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                         onClick={() => handleDeleteItem('admins', email)}
                         className="p-1 text-red-500 hover:bg-red-50 rounded-md transition cursor-pointer"
                         title="إلغاء التفويض"
-                        disabled={email === 'waheedsamaha8@gmail.com'} // Protect main user
+                        disabled={config.admins.length <= 1} // Protect at least one admin
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>

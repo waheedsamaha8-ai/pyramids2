@@ -95,6 +95,7 @@ export default function App() {
 
   // App configurations & lists
   const [config, setConfig] = useState<AppConfig>({
+    buildingName: 'عمارة التقوى',
     expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
     paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
     activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري', 'بدون تشطيب'],
@@ -112,7 +113,7 @@ export default function App() {
     },
     adminResidentProfile: {
       flatNumber: 207,
-      name: 'وحيد سماحة (رئيس الاتحاد)',
+      name: 'محمد احمد (رئيس الاتحاد)',
       phone: '',
       activityType: 'سكني',
       ownershipType: 'تمليك',
@@ -715,7 +716,7 @@ export default function App() {
         detectedRole = 'ASSISTANT';
       } else if (
         (currentUser as any).role === 'ADMIN' ||
-        email === 'waheedsamaha8@gmail.com' ||
+        email === 'admin@altaqwa.com' ||
         appConfig.admins.some(a => a.toLowerCase().trim() === email)
       ) {
         detectedRole = 'ADMIN';
@@ -1667,7 +1668,7 @@ export default function App() {
         const newAdminRes: Resident = {
           id: `res_president_${targetFlat}_${Date.now()}`,
           flatNumber: targetFlat,
-          name: prof.name || 'وحيد سماحة (رئيس الاتحاد)',
+          name: prof.name || 'محمد احمد (رئيس الاتحاد)',
           phone: prof.phone || '',
           activityType: prof.activityType || 'سكني',
           ownershipType: prof.ownershipType || 'تمليك',
@@ -1679,9 +1680,20 @@ export default function App() {
       }
 
       // If in resident mode or if active flatNumber matches, update flatNumber
-      if (role === 'RESIDENT' || user?.email === 'waheedsamaha8@gmail.com') {
+      if (role === 'RESIDENT' || role === 'ADMIN') {
         setFlatNumber(targetFlat);
         localStorage.setItem('resident_flat_number', String(targetFlat));
+      }
+
+      // Update current user display name in state and session if admin
+      if (prof.name && user && role === 'ADMIN') {
+        const updatedUser = { ...user, displayName: prof.name };
+        setUser(updatedUser);
+        try {
+          localStorage.setItem('custom_user_session', JSON.stringify(updatedUser));
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -2132,7 +2144,7 @@ export default function App() {
       return {
         id: `res_admin_${p.flatNumber || 101}`,
         flatNumber: p.flatNumber || 101,
-        name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
+        name: p.name || 'محمد احمد (رئيس الاتحاد)',
         phone: p.phone || '',
         activityType: p.activityType || 'سكني',
         ownershipType: p.ownershipType || 'تمليك',
@@ -2211,7 +2223,7 @@ export default function App() {
             <Building className="w-6 h-6 text-blue-900 dark:text-blue-400 absolute animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام بيراميدز فيو ١</h2>
+            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام {config.buildingName || 'عمارة التقوى'}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 leading-relaxed">
               يرجى الانتظار قليلاً بينما نقوم بمزامنة البيانات وتأمين جلسة العمل...
             </p>
@@ -2258,14 +2270,16 @@ export default function App() {
               <Building2 className="w-5 h-5" />
             </div>
             <div className="flex flex-col text-right">
-              <h1 className="text-sm sm:text-base font-black text-blue-950 tracking-tight leading-tight">بيراميدز فيو ١</h1>
+              <h1 className="text-sm sm:text-base font-black text-blue-950 tracking-tight leading-tight">{config.buildingName || 'عمارة التقوى'}</h1>
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-bold text-slate-700">
                   {role === 'ASSISTANT'
                     ? 'المساعد الفني'
-                    : (role === 'RESIDENT' && config.adminResidentProfile?.name 
-                      ? config.adminResidentProfile.name 
-                      : (currentResidentObj?.name || user.displayName))}
+                    : role === 'ADMIN'
+                    ? (config.adminResidentProfile?.name || user?.displayName || 'رئيس الاتحاد')
+                    : (role === 'RESIDENT' && config.adminResidentProfile?.name
+                      ? config.adminResidentProfile.name
+                      : (currentResidentObj?.name || user?.displayName || 'ساكن'))}
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold">
                   ({role === 'ADMIN' ? 'إدارة الملاك' : role === 'ASSISTANT' ? 'المساعد الفني' : role === 'MANAGER' ? 'مدير العمارة' : `ساكن وحدة ${flatNumber || config.adminResidentProfile?.flatNumber || '?'}`})
@@ -2367,7 +2381,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-900 text-sm">قائمة النظام</h3>
-                    <p className="text-[10px] text-slate-400 font-bold">بيراميدز فيو ١</p>
+                    <p className="text-[10px] text-slate-400 font-bold">{config.buildingName || 'عمارة التقوى'}</p>
                   </div>
                 </div>
                 <button 
@@ -2379,7 +2393,7 @@ export default function App() {
               </div>
 
               {/* Mode Switch for Admin */}
-              {(user?.email === 'waheedsamaha8@gmail.com' || (user as any)?.role === 'ADMIN' || config.admins.some(a => a.toLowerCase().trim() === user?.email?.toLowerCase().trim())) && (
+              {((user as any)?.role === 'ADMIN' || user?.email === 'admin@altaqwa.com' || config.admins.some(a => a.toLowerCase().trim() === user?.email?.toLowerCase().trim())) && (
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-slate-800">وضع المعاينة والتحكم</span>
@@ -2590,8 +2604,16 @@ export default function App() {
             {/* Logout button in drawer */}
             <div className="pt-4 border-t border-slate-100 mt-4 space-y-2">
               <div className="flex items-center justify-between px-1 text-[11px] text-slate-500 font-bold">
-                <span>{role === 'ASSISTANT' ? 'المساعد الفني' : user.displayName}</span>
-                <span>{role === 'ADMIN' ? 'رئيس الاتحاد' : role === 'ASSISTANT' ? 'المساعد الفني' : 'ساكن'}</span>
+                <span className="font-extrabold text-slate-800">
+                  {role === 'ASSISTANT'
+                    ? 'المساعد الفني'
+                    : role === 'ADMIN'
+                    ? (config.adminResidentProfile?.name || user?.displayName || 'رئيس الاتحاد')
+                    : (currentResidentObj?.name || user?.displayName || 'ساكن')}
+                </span>
+                <span className="text-[10px] text-blue-900 bg-blue-50 px-2 py-0.5 rounded-full font-bold">
+                  {role === 'ADMIN' ? 'رئيس الاتحاد' : role === 'ASSISTANT' ? 'المساعد الفني' : `شقة ${flatNumber || '?'}`}
+                </span>
               </div>
               <button
                 onClick={() => { handleLogout(); setMenuOpen(false); }}
@@ -2614,7 +2636,7 @@ export default function App() {
             <div className="text-right">
               <h3 className="font-extrabold text-xs sm:text-sm mb-0.5 flex items-center gap-1.5">
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>تثبيت تطبيق بيراميدز فيو ١</span>
+                <span>تثبيت تطبيق {config.buildingName || 'عمارة التقوى'}</span>
               </h3>
               <p className="text-[10px] sm:text-xs text-indigo-200">ثبّت التطبيق على شاشة جوالك الرئيسية لاستخدام سريع ومباشر وإمكانية العمل بدون إنترنت.</p>
             </div>
@@ -3722,7 +3744,7 @@ export default function App() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-3 text-center">
         <p className="text-[11px] text-slate-500 font-extrabold">
-          مع تحيات اتحاد ملاك بيراميدز فيو ١
+          مع تحيات اتحاد ملاك {config.buildingName || 'عمارة التقوى'}
         </p>
       </footer>
     </div>

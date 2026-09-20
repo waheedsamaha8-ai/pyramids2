@@ -85,6 +85,7 @@ export interface AssistantConfig {
 }
 
 export interface AppConfig {
+  buildingName?: string;
   expenseTypes: string[];
   paymentTypes: string[];
   activityTypes: string[];

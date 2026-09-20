@@ -4,7 +4,8 @@ import {
   loginWithEmail, 
   registerAdmin, 
   submitJoinRequest, 
-  fetchAllJoinRequests 
+  fetchAllJoinRequests,
+  getLocalAdmins
 } from '../services/authStore';
 import { 
   Mail, 
@@ -22,7 +23,9 @@ import {
   Sparkles,
   ArrowRight,
   Home,
-  Wrench
+  Wrench,
+  Smartphone,
+  Download
 } from 'lucide-react';
 
 interface LoginProps {
@@ -46,7 +49,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [loginPassword, setLoginPassword] = useState('');
 
   // President Register inputs
-  const [adminName, setAdminName] = useState('');
+  const [adminName, setAdminName] = useState('محمد احمد');
+  const [buildingNameInput, setBuildingNameInput] = useState('عمارة التقوى');
   const [adminPhone, setAdminPhone] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
@@ -61,6 +65,49 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [tenantPhone, setTenantPhone] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
+
+  // PWA Install state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [pwaInstalled, setPwaInstalled] = useState(false);
+  const [isIosDevice, setIsIosDevice] = useState(false);
+  const [showIosPwaGuide, setShowIosPwaGuide] = useState(false);
+
+  React.useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    setPwaInstalled(isStandalone);
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isIos = /iphone|ipad|ipod/.test(ua);
+    setIsIosDevice(isIos);
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleInstalled = () => {
+      setPwaInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, []);
+
+  const handlePwaInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setPwaInstalled(true);
+      setDeferredPrompt(null);
+    }
+  };
 
   // Handle standard custom email/password login
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -112,13 +159,28 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setSuccessMessage(null);
 
     try {
+      const selectedBuildingName = buildingNameInput.trim() || 'عمارة التقوى';
+      const selectedAdminName = adminName.trim() || 'محمد احمد';
+
       const data = await registerAdmin({
-        name: adminName.trim(),
+        name: selectedAdminName,
         phone: adminPhone.trim(),
         email: adminEmail.trim(),
         password: adminPassword.trim(),
         securityKey: adminSecurityKey.trim(),
       });
+
+      // Save buildingName and admin profile to local cache config
+      try {
+        const raw = localStorage.getItem('custom_app_config');
+        const existingConfig = raw ? JSON.parse(raw) : {};
+        existingConfig.buildingName = selectedBuildingName;
+        if (!existingConfig.adminResidentProfile) existingConfig.adminResidentProfile = {};
+        existingConfig.adminResidentProfile.name = selectedAdminName;
+        localStorage.setItem('custom_app_config', JSON.stringify(existingConfig));
+      } catch {
+        // ignore
+      }
 
       setSuccessMessage('تم تفعيل وتسجيل حساب رئيس الاتحاد بنجاح! جاري الدخول للوحة التحكم...');
       
@@ -151,7 +213,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         const email = user.email?.toLowerCase().trim() || '';
 
         // 1. Is President / Admin?
-        if (email === 'waheedsamaha8@gmail.com') {
+        const currentAdmins = getLocalAdmins();
+        const isAdminMatch = currentAdmins.some((a: any) => a.email.toLowerCase().trim() === email);
+        if (isAdminMatch || email === 'admin@altaqwa.com') {
           (user as any).role = 'ADMIN';
           localStorage.setItem('custom_user_session', JSON.stringify({ ...user, role: 'ADMIN' }));
           onLoginSuccess(user, accessToken);
@@ -172,7 +236,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             return;
           } else if (match.status === 'PENDING') {
             await logoutUser();
-            setError('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد (المستشار وحيد سماحة). يرجى المحاولة لاحقاً بمجرد الموافقة.');
+            setError('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد. يرجى المحاولة لاحقاً بمجرد الموافقة.');
             return;
           } else if (match.status === 'DECLINED') {
             await logoutUser();
@@ -237,7 +301,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
       const result = await submitJoinRequest(payload);
 
-      setSuccessMessage(result.message || 'تم إرسال طلب الانضمام بنجاح! طلبك قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد (المستشار وحيد سماحة).');
+      setSuccessMessage(result.message || 'تم إرسال طلب الانضمام بنجاح! طلبك قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد.');
       // Clear fields
       setFlatNumber('');
       setOwnerName('');
@@ -263,8 +327,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-900 dark:bg-blue-800 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-900/20 mb-3 border border-blue-700/40">
             <Building className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-blue-950 dark:text-white text-center">اتحاد ملاك بيراميدز فيو ١</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-xs text-center mt-1 font-bold">النظام الذكي والموحد لإدارة شؤون وماليات وخدمات العمارة</p>
+          <h1 className="text-xl sm:text-2xl font-black text-blue-950 dark:text-white text-center">اتحاد ملاك {buildingNameInput || 'عمارة التقوى'}</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-[11px] text-center mt-1 font-bold">النظام الذكي والموحد لإدارة شؤون وماليات وخدمات العمارة</p>
         </div>
 
         {/* ========================================================================= */}
@@ -412,7 +476,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       required
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="waheedsamaha8@gmail.com"
+                      placeholder="admin@altaqwa.com"
                       className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
                     />
                   </div>
@@ -492,7 +556,24 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       required
                       value={adminName}
                       onChange={(e) => setAdminName(e.target.value)}
-                      placeholder="المستشار وحيد سماحة"
+                      placeholder="محمد احمد"
+                      className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">اسم العمارة / اتحاد الملاك</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                      <Building className="h-4 w-4 text-slate-400" />
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={buildingNameInput}
+                      onChange={(e) => setBuildingNameInput(e.target.value)}
+                      placeholder="عمارة التقوى"
                       className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
                     />
                   </div>
@@ -527,7 +608,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                         required
                         value={adminEmail}
                         onChange={(e) => setAdminEmail(e.target.value)}
-                        placeholder="waheedsamaha8@gmail.com"
+                        placeholder="president@gmail.com"
                         className="w-full pl-2 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
                         dir="ltr"
                       />
@@ -554,7 +635,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold text-right">رمز الأمان الإداري الخاص برئيس الاتحاد</label>
+                    <label className="block text-slate-700 dark:text-slate-300 text-[10px] font-bold text-right">رمز الأمان الإداري الخاص برئيس الاتحاد</label>
                     <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">(الرمز الافتراضي: admin123)</span>
                   </div>
                   <div className="relative">
@@ -976,13 +1057,75 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
+        {/* Mobile PWA Install Banner */}
+        {!pwaInstalled && (deferredPrompt || isIosDevice) && (
+          <div className="mt-5 p-3 sm:p-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl flex items-center justify-between border border-blue-700/50 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/15">
+                <Smartphone className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="text-right">
+                <h4 className="text-xs font-black">تثبيت التطبيق على هاتفك</h4>
+                <p className="text-[10px] text-blue-200 font-medium">أيقونة مخصصة وسرعة تشغيل فورية</p>
+              </div>
+            </div>
+            {deferredPrompt ? (
+              <button
+                type="button"
+                onClick={handlePwaInstall}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black rounded-xl text-xs flex items-center gap-1 shadow-sm transition cursor-pointer shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>تثبيت</span>
+              </button>
+            ) : isIosDevice ? (
+              <button
+                type="button"
+                onClick={() => setShowIosPwaGuide(true)}
+                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 active:scale-95 text-white font-black rounded-xl text-xs flex items-center gap-1 transition cursor-pointer shrink-0"
+              >
+                <span>طريقة التثبيت</span>
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {/* iOS PWA Install Guide Modal */}
+        {showIosPwaGuide && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-4" dir="rtl">
+            <div className="bg-slate-800 border border-slate-700 text-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center mx-auto">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-black text-center text-slate-100">تثبيت التطبيق على الآيفون / الآيباد</h3>
+              <div className="space-y-3 text-xs text-slate-300 bg-slate-900/60 p-4 rounded-2xl border border-slate-700/60">
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 bg-blue-600 text-white font-bold rounded-full flex items-center justify-center shrink-0 text-[10px]">١</span>
+                  <p>اضغط على أيقونة <strong>المشاركة (Share)</strong> في شريط متصفح Safari.</p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 bg-blue-600 text-white font-bold rounded-full flex items-center justify-center shrink-0 text-[10px]">٢</span>
+                  <p>اختر <strong>إضافة إلى الشاشة الرئيسية (Add to Home Screen)</strong>.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIosPwaGuide(false)}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition text-xs cursor-pointer"
+              >
+                فهمت، إغلاق
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center flex flex-col items-center gap-1">
           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-            مع تحيات مجلس إدارة اتحاد ملاك بيراميدز فيو ١
+            مع تحيات مجلس إدارة اتحاد ملاك {buildingNameInput || 'عمارة التقوى'}
           </span>
           <span className="text-[10px] text-slate-400 font-medium">
-            رئيس الاتحاد: المستشار وحيد سماحة
+            رئيس الاتحاد: {adminName || 'محمد احمد'}
           </span>
         </div>
       </div>

@@ -428,7 +428,7 @@ async function seedInitialData() {
     ['expenseTypes', 'صيانة,كهرباء,مياه,أمن ونظافة,مصاعد,أخرى'],
     ['paymentTypes', 'اشتراك شهري,صيانة طارئة,تحصيلات اخرى'],
     ['activityTypes', 'سكني,سكني مغلق,مفروش,إداري,تجاري'],
-    ['admins', 'waheedsamaha8@gmail.com'], // default admin from the context email
+    ['admins', 'admin@altaqwa.com'], // default admin email
     ['managers', ''],
     ['accountingStartDate', '2026-01-01'],
     ['defaultMonthlyFee', '400'],
@@ -540,7 +540,7 @@ export async function getAppConfig(): Promise<AppConfig> {
 
   const defaultAdminProfile: AdminResidentProfile = {
     flatNumber: 207,
-    name: 'وحيد سماحة (رئيس الاتحاد)',
+    name: 'محمد احمد (رئيس الاتحاد)',
     phone: '',
     activityType: 'سكني',
     ownershipType: 'تمليك',
@@ -550,10 +550,11 @@ export async function getAppConfig(): Promise<AppConfig> {
   };
 
   const config: AppConfig = {
+    buildingName: 'عمارة التقوى',
     expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
     paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
     activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري'],
-    admins: ['waheedsamaha8@gmail.com'],
+    admins: ['admin@altaqwa.com'],
     managers: [],
     accountingStartDate: '2026-01-01',
     defaultMonthlyFee: 400,
@@ -577,6 +578,7 @@ export async function getAppConfig(): Promise<AppConfig> {
     rows.forEach((row: string[]) => {
       if (!Array.isArray(row) || row.length < 2) return;
       const [key, value] = row;
+      if (key === 'buildingName' && value) config.buildingName = value.trim();
       if (key === 'expenseTypes') config.expenseTypes = value.split(',').filter(Boolean);
       if (key === 'paymentTypes') config.paymentTypes = value.split(',').filter(Boolean);
       if (key === 'activityTypes') config.activityTypes = value.split(',').filter(Boolean);
@@ -643,6 +645,7 @@ export async function saveAppConfig(config: AppConfig) {
 
   const values = [
     ['Key', 'Value'],
+    ['buildingName', config.buildingName || 'عمارة التقوى'],
     ['expenseTypes', config.expenseTypes.join(',')],
     ['paymentTypes', config.paymentTypes.join(',')],
     ['activityTypes', config.activityTypes.join(',')],

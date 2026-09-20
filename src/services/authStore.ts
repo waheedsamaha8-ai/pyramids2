@@ -30,9 +30,9 @@ const LOCAL_JOIN_REQUESTS_KEY = 'custom_join_requests';
 // Default Master Admin
 const DEFAULT_MASTER_ADMIN: StoredAdmin = {
   id: 'admin_master_1',
-  email: 'waheedsamaha8@gmail.com',
+  email: 'admin@altaqwa.com',
   password: 'admin123',
-  name: 'المستشار وحيد سماحة (رئيس الاتحاد)',
+  name: 'محمد احمد (رئيس الاتحاد)',
   phone: '01000000000',
   role: 'ADMIN',
   createdAt: '2026-01-01T00:00:00.000Z',
@@ -146,13 +146,13 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
       success: true,
       role: 'ADMIN',
       email: adminMatch.email,
-      name: adminMatch.name || 'المستشار وحيد سماحة (رئيس الاتحاد)',
+      name: adminMatch.name || 'محمد احمد (رئيس الاتحاد)',
     };
   }
 
   // Check Assistant Config from local storage cache + Default assistant credentials
   try {
-    let assistantEmail = 'assistant@pyramids.com';
+    let assistantEmail = 'assistant@altaqwa.com';
     let assistantPassword = 'assistant123';
     let assistantName = 'المساعد الفني';
 
@@ -166,7 +166,7 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
       }
     }
 
-    const defaultAssistantEmails = ['assistant@pyramids.com', 'assistant'];
+    const defaultAssistantEmails = ['assistant@altaqwa.com', 'assistant@pyramids.com', 'assistant'];
     const defaultAssistantPasswords = ['assistant123', '123456', '123', 'assistant'];
 
     const isAssistantEmailMatch = email === assistantEmail || defaultAssistantEmails.includes(email);
@@ -204,7 +204,7 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
   }
 
   if (residentMatch.status === 'PENDING') {
-    throw new Error('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد (المستشار وحيد سماحة). يرجى المحاولة لاحقاً بمجرد الموافقة.');
+    throw new Error('طلب الانضمام الخاص بك قيد المراجعة حالياً من قبل رئيس الاتحاد. يرجى المحاولة لاحقاً بمجرد الموافقة.');
   }
 
   if (residentMatch.status === 'DECLINED') {
@@ -360,7 +360,7 @@ export async function submitJoinRequest(payload: {
 
   return {
     success: true,
-    message: 'تم إرسال طلب الانضمام بنجاح وهو قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد (المستشار وحيد سماحة).',
+    message: 'تم إرسال طلب الانضمام بنجاح وهو قيد المراجعة والاعتماد حالياً من قبل رئيس الاتحاد.',
   };
 }
 

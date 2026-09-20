@@ -67,7 +67,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
       return {
         id: `res_admin_${p.flatNumber || 101}`,
         flatNumber: p.flatNumber || 101,
-        name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
+        name: p.name || 'محمد احمد (رئيس الاتحاد)',
         phone: p.phone || '',
         activityType: p.activityType || 'سكني',
         ownershipType: p.ownershipType || 'تمليك',
@@ -959,7 +959,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
         <div id="statement-printable-area" className="printable-area hidden print:block text-right p-6 font-sans" dir="rtl">
           {/* Header */}
           <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-6">
-            <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك عمارة بيراميدز فيو ١</h1>
+            <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك {config.buildingName || 'عمارة التقوى'}</h1>
             <p className="text-sm font-bold text-slate-600">
               كشف حساب ومطالبات اشتراكات - وحدة رقم ({activeResident.flatNumber})
             </p>
@@ -1102,7 +1102,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
 
           {/* Page Footer */}
           <div className="mt-16 text-center text-[10px] text-slate-400 font-semibold">
-            تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة عمارة بيراميدز فيو ١
+            تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة {config.buildingName || 'عمارة التقوى'}
           </div>
         </div>
       )}

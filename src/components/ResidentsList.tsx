@@ -525,7 +525,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
           newResidents.push({
             id: existingMap.get(unitStr)?.id || `res_president_${unitId}_${Date.now()}`,
             flatNumber: unitId,
-            name: presidentProfile.name || 'وحيد سماحة (رئيس الاتحاد)',
+            name: presidentProfile.name || 'محمد احمد (رئيس الاتحاد)',
             activityType: presidentProfile.activityType || configItem.activityType,
             phone: presidentProfile.phone || existingMap.get(unitStr)?.phone || '',
             notes: presidentProfile.notes || 'رئيس اتحاد الملاك',
@@ -567,7 +567,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
       newResidents.push({
         id: existingMap.get(presStr)?.id || `res_president_${presFlat}_${Date.now()}`,
         flatNumber: presFlat,
-        name: presidentProfile.name || 'وحيد سماحة (رئيس الاتحاد)',
+        name: presidentProfile.name || 'محمد احمد (رئيس الاتحاد)',
         activityType: presidentProfile.activityType || 'سكني',
         phone: presidentProfile.phone || existingMap.get(presStr)?.phone || '',
         notes: presidentProfile.notes || 'رئيس اتحاد الملاك',

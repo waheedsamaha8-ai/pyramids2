@@ -56,7 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
             
             <h1 className="text-2xl font-bold text-slate-100 mb-2">حدث خطأ غير متوقع في التشغيل</h1>
             <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-              حدث استثناء أثناء عرض واجهة نظام بيراميدز فيو ١. يمكنك إعادة تحميل الصفحة أو إعادة ضبط الجلسة لاستئناف العمل فوراً.
+              حدث استثناء أثناء عرض واجهة نظام العمارة. يمكنك إعادة تحميل الصفحة أو إعادة ضبط الجلسة لاستئناف العمل فوراً.
             </p>
 
             <div className="flex flex-col gap-3">
