@@ -22,7 +22,10 @@ import {
   Sparkles,
   ArrowRight,
   Home,
-  Wrench
+  Wrench,
+  Copy,
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 
 interface LoginProps {
@@ -40,6 +43,17 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+
+  const handleCopyDomain = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 3000);
+    }).catch(() => {
+      // Fallback
+    });
+  };
 
   // Sign In inputs (shared or dedicated)
   const [loginEmail, setLoginEmail] = useState('');
@@ -190,7 +204,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       if (err && (err.code === 'auth/popup-closed-by-user' || err.message?.includes('popup-closed-by-user'))) {
         setError('تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية.');
       } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
-        setError('هذا النطاق (Netlify) يحتاج للإضافة إلى النطاقات المصرح بها في Google Firebase Console. يمكنك استخدام تسجيل الدخول السريع أو البريد الإلكتروني وكلمة المرور مباشرة.');
+        const domain = window.location.hostname || 'waheedsamaha8-ai.github.io';
+        setUnauthorizedDomain(domain);
+        setError(`نطاق الموقع (${domain}) يحتاج إلى إضافة سريعة في قائمة النطاقات المصرح بها في إعدادات Firebase Console.`);
       } else {
         setError('فشل تسجيل الدخول بـ Google. يمكنك استخدام تسجيل الدخول السريع أو البريد وكلمة المرور.');
       }
@@ -344,6 +360,77 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </button>
           </div>
         </div>
+
+        {/* Dedicated Authorized Domain Helper Alert */}
+        {unauthorizedDomain && (
+          <div className="bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 p-4 rounded-2xl mb-5 space-y-3 text-right shadow-sm animate-fade-in" dir="rtl">
+            <div className="flex items-start gap-2.5">
+              <Globe className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-black text-xs sm:text-sm text-amber-900 dark:text-amber-200">
+                  تفعيل النطاق في إعدادات Google Firebase المصرح بها (Authorized Domains)
+                </h4>
+                <p className="text-[11px] sm:text-xs text-amber-800 dark:text-amber-300 font-bold leading-relaxed">
+                  لحماية بيانات الموقع، تشترط Google إضافة نطاق موقعك الحالي (<span className="underline font-black text-amber-950 dark:text-white font-mono dir-ltr inline-block">{unauthorizedDomain}</span>) إلى قائمة النطاقات المسموح لها لمرة واحدة فقط ليعمل تسجيل الدخول بـ Google.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick action bar */}
+            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-[11px] font-bold text-slate-500 shrink-0">النطاق المطلوب:</span>
+                <span className="font-mono text-xs font-black text-blue-900 dark:text-blue-300 truncate dir-ltr">
+                  {unauthorizedDomain}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleCopyDomain(unauthorizedDomain)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copiedDomain ? 'تم النسخ بنجاح ✓' : 'نسخ النطاق'}</span>
+                </button>
+                <a
+                  href="https://console.firebase.google.com/project/gen-lang-client-0491644540/authentication/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>فتح إعدادات Firebase</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Simple steps */}
+            <div className="text-[11px] font-bold text-amber-900/90 dark:text-amber-200/90 space-y-1 bg-amber-100/60 dark:bg-amber-900/30 p-2.5 rounded-xl">
+              <div className="font-black text-amber-950 dark:text-amber-100">الخطوات السريعة (تستغرق 20 ثانية):</div>
+              <ol className="list-decimal list-inside space-y-0.5 pr-1">
+                <li>اضغط على زر <strong>فتح إعدادات Firebase</strong> أعلاه للمشروع (<strong>gen-lang-client-0491644540</strong>).</li>
+                <li>انزل إلى قسم <strong>النطاقات المصرح بها (Authorized domains)</strong> واضغط <strong>إضافة نطاق (Add domain)</strong>.</li>
+                <li>الصق النطاق المنسوخ (<strong className="font-mono dir-ltr inline-block">{unauthorizedDomain}</strong>) ثم اضغط <strong>حفظ (Save)</strong>، ثم أعد المحاولة.</li>
+              </ol>
+            </div>
+
+            {/* Instant Alternative: email/password */}
+            <div className="pt-1 flex items-center justify-between">
+              <span className="text-[10px] text-amber-800 dark:text-amber-300 font-bold">أو يمكنك الدخول فوراً بكلمة المرور الإدارية دون انتظار:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setUnauthorizedDomain(null);
+                  setError(null);
+                }}
+                className="text-xs font-black text-blue-800 dark:text-blue-300 hover:underline cursor-pointer"
+              >
+                الدخول بكلمة المرور أدناه ↓
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Messaging block */}
         {error && (

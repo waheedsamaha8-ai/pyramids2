@@ -988,7 +988,16 @@ export default function App() {
       addNotification('تم ربط Google Drive بنجاح', 'تم إنشاء وربط مجلدات Google Drive وجداول Google Sheets بحساب waheedsamaha8@gmail.com بنجاح!', 'success');
     } catch (err: any) {
       logError(err, 'handleConnectGoogleDrive');
-      addNotification('خطأ في ربط Google Drive', err?.message || 'تعذر استكمال الربط مع Google حالياً.', 'error');
+      const domain = window.location.hostname || 'waheedsamaha8-ai.github.io';
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        addNotification(
+          'تفعيل نطاق Google مطلوب',
+          `نطاق موقعك (${domain}) غير مصرح به في Firebase Console. يرجى إضافته إلى Authorized Domains في إعدادات المشروع gen-lang-client-0491644540 ليتمكن Google من إتمام المزامنة السحابية.`,
+          'error'
+        );
+      } else {
+        addNotification('خطأ في ربط Google Drive', err?.message || 'تعذر استكمال الربط مع Google حالياً.', 'error');
+      }
     } finally {
       setIsConnectingGoogle(false);
     }
