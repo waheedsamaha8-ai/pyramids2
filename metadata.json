@@ -1,0 +1,10 @@
+{
+  "name": "اتحاد ملاك بيراميدز فيو ١",
+  "description": "نظام إدارة اتحاد ملاك عمارة بيراميدز فيو ١ لإدارة التحصيلات والمصروفات والسكان.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

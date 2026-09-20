@@ -1,0 +1,2012 @@
+import { 
+  Resident, 
+  Payment, 
+  Expense, 
+  BuildingRules, 
+  AppConfig, 
+  AdminResidentProfile,
+  Craftsman, 
+  CraftsmanComment,
+  ChatMessage,
+  AdminDecision,
+  Poll,
+  PublicComplaint,
+  MaintenanceRequest,
+  BuildingEvent,
+  JoinRequest
+} from '../types';
+import { fetchAllJoinRequests } from './authStore';
+
+let currentAccessToken: string | null = null;
+let spreadsheetId: string | null = null;
+let sheetIds: { [title: string]: number } = {};
+
+/**
+ * Safely parses any formatted or unformatted number string returned from Google Sheets.
+ * Handles Arabic/Persian numerals, commas as thousand separators, currency symbols, and negative formats like (100) or -100.
+ */
+export function parseSheetNumber(val: any): number {
+  if (val === undefined || val === null) return 0;
+  if (typeof val === 'number') {
+    return isNaN(val) ? 0 : val;
+  }
+  let str = String(val).trim();
+  if (!str) return 0;
+
+  // 1. Convert Arabic-Indic / Persian digits to English digits
+  const standardDigits: Record<string, string> = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+  };
+  str = str.replace(/[٠-٩۰-۹]/g, (char) => standardDigits[char] || char);
+
+  // 2. Check for negative indicator: minus sign or accounting parenthesis (e.g., (1,200) )
+  const isNegative = str.includes('-') || (str.startsWith('(') && str.endsWith(')'));
+
+  // 3. Remove all non-numeric characters except decimal points
+  let cleanStr = '';
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if ((char >= '0' && char <= '9') || char === '.') {
+      cleanStr += char;
+    }
+  }
+
+  // 4. Parse as float
+  const num = parseFloat(cleanStr);
+  if (isNaN(num)) return 0;
+
+  return isNegative ? -Math.abs(num) : num;
+}
+
+export function parseSheetNumberOptional(val: any): number | undefined {
+  if (val === undefined || val === null || String(val).trim() === '') return undefined;
+  const num = parseSheetNumber(val);
+  return num === 0 && String(val).trim() !== '0' && String(val).trim() !== '٠' ? undefined : num;
+}
+
+export function parseSheetInt(val: any): number {
+  return Math.round(parseSheetNumber(val));
+}
+
+export function parseSheetIntOptional(val: any): number | undefined {
+  const num = parseSheetNumberOptional(val);
+  return num !== undefined ? Math.round(num) : undefined;
+}
+
+// Cache for read requests to save quota
+const cache = {
+  residents: { data: null as Resident[] | null, expiry: 0 },
+  payments: { data: null as Payment[] | null, expiry: 0 },
+  expenses: { data: null as Expense[] | null, expiry: 0 },
+  rules: { data: null as string[] | null, expiry: 0 },
+  craftsmen: { data: null as Craftsman[] | null, expiry: 0 },
+  messages: { data: null as ChatMessage[] | null, expiry: 0 },
+  decisions: { data: null as AdminDecision[] | null, expiry: 0 },
+  polls: { data: null as Poll[] | null, expiry: 0 },
+  complaints: { data: null as PublicComplaint[] | null, expiry: 0 },
+  maintenance: { data: null as MaintenanceRequest[] | null, expiry: 0 },
+  events: { data: null as BuildingEvent[] | null, expiry: 0 },
+};
+
+const CACHE_TTL = 10000; // 10 seconds TTL to heavily reduce quota during rapid clicks
+
+function getFromCache<T>(key: keyof typeof cache): T | null {
+  if (cache[key].data && Date.now() < cache[key].expiry) {
+    return cache[key].data as unknown as T;
+  }
+  return null;
+}
+
+function setInCache(key: keyof typeof cache, data: any) {
+  cache[key].data = data;
+  cache[key].expiry = Date.now() + CACHE_TTL;
+}
+
+function getLocalCache<T>(key: string): T | null {
+  try {
+    const json = localStorage.getItem(`cache_${key}`);
+    return json ? JSON.parse(json) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setAccessToken(token: string | null) {
+  currentAccessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return currentAccessToken;
+}
+
+export function setSpreadsheetId(id: string | null) {
+  spreadsheetId = id;
+}
+
+export function getSpreadsheetId(): string | null {
+  return spreadsheetId;
+}
+
+// Check if spreadsheetId is available and throw error if not
+function checkAuth() {
+  if (!currentAccessToken) {
+    throw new Error('لم يتم تسجيل الدخول بعد أو انتهت صلاحية الجلسة.');
+  }
+}
+
+// Main fetch wrapper with authorization
+async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
+  checkAuth();
+
+  if (currentAccessToken === 'local-token') {
+    console.warn('Google API bypassed for local-token (Resident session). Using local/cached operations.');
+    if (url.includes('values/JoinRequests')) {
+      try {
+        const data = await fetchAllJoinRequests();
+        const values = data.map((req: any) => [
+          req.id,
+          String(req.flatNumber),
+          req.residentType,
+          req.ownerName,
+          req.ownerPhone,
+          req.tenantName,
+          req.tenantPhone,
+          req.email,
+          req.password,
+          req.status,
+          req.createdAt,
+        ]);
+        return { values };
+      } catch (e) {
+        console.error('Failed to fetch local join requests in bypass', e);
+      }
+    }
+    if (url.includes('values/')) {
+      return { values: [] };
+    }
+    return {};
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${currentAccessToken}`,
+    ...(options.headers || {}),
+  };
+
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData?.error?.message || response.statusText;
+    
+    // Check if it is an authorization/token expiry error
+    if (
+      response.status === 401 ||
+      errorMessage.toLowerCase().includes('credential') ||
+      errorMessage.toLowerCase().includes('token') ||
+      errorMessage.toLowerCase().includes('unauthorized') ||
+      errorMessage.toLowerCase().includes('authenticated')
+    ) {
+      currentAccessToken = null;
+      localStorage.removeItem('google_access_token');
+      // Dispatch custom event to notify App.tsx to gracefully log out the user and show a message
+      window.dispatchEvent(new CustomEvent('google-auth-error'));
+    }
+    
+    throw new Error(`Google API Error: ${errorMessage}`);
+  }
+  return response.json();
+}
+
+// 1. Search for existing spreadsheet or create one
+export async function initializeSpreadsheet(): Promise<string> {
+  checkAuth();
+
+  const defaultSheetTitles = [
+    'Config', 
+    'Residents', 
+    'Payments', 
+    'Expenses', 
+    'Rules', 
+    'Craftsmen', 
+    'ChatMessages', 
+    'AdminDecisions', 
+    'Polls', 
+    'Complaints', 
+    'MaintenanceRequests', 
+    'Events',
+    'JoinRequests'
+  ];
+
+  if (currentAccessToken === 'local-token') {
+    const sId = localStorage.getItem('sheets_db_spreadsheet_id') || 'local-resident-spreadsheet';
+    spreadsheetId = sId;
+    defaultSheetTitles.forEach((title, idx) => {
+      sheetIds[title] = idx;
+    });
+    return sId;
+  }
+  
+  // Check if we have a stored spreadsheet ID from previous sessions
+  const storedId = localStorage.getItem('sheets_db_spreadsheet_id');
+  if (storedId && storedId !== 'local-resident-spreadsheet') {
+    spreadsheetId = storedId;
+    try {
+      await fetchSheetMetadata();
+      return storedId;
+    } catch (err) {
+      console.warn('Could not verify cached spreadsheet ID, searching Drive:', err);
+    }
+  }
+
+  // Search for file named "Pyramids View 1 - Management Database"
+  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='Pyramids View 1 - Management Database' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false&fields=files(id,name)`;
+  const searchResult = await apiFetch(searchUrl);
+  
+  if (searchResult?.files && Array.isArray(searchResult.files) && searchResult.files.length > 0) {
+    const sId = searchResult.files[0].id;
+    spreadsheetId = sId;
+    localStorage.setItem('sheets_db_spreadsheet_id', sId);
+    await fetchSheetMetadata();
+    return sId;
+  }
+  
+  // Create spreadsheet if not found
+  const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
+  const body = {
+    properties: {
+      title: 'Pyramids View 1 - Management Database',
+    },
+    sheets: [
+      { properties: { title: 'Config' } },
+      { properties: { title: 'Residents' } },
+      { properties: { title: 'Payments' } },
+      { properties: { title: 'Expenses' } },
+      { properties: { title: 'Rules' } },
+      { properties: { title: 'Craftsmen' } },
+      { properties: { title: 'ChatMessages' } },
+      { properties: { title: 'AdminDecisions' } },
+      { properties: { title: 'Polls' } },
+      { properties: { title: 'Complaints' } },
+      { properties: { title: 'MaintenanceRequests' } },
+      { properties: { title: 'Events' } },
+      { properties: { title: 'JoinRequests' } },
+    ],
+  };
+  
+  const createResult = await apiFetch(createUrl, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  
+  const sId = createResult?.spreadsheetId;
+  if (!sId) {
+    const fallbackId = 'pyramids-view-1-fallback-db';
+    spreadsheetId = fallbackId;
+    localStorage.setItem('sheets_db_spreadsheet_id', fallbackId);
+    defaultSheetTitles.forEach((title, idx) => {
+      sheetIds[title] = idx;
+    });
+    return fallbackId;
+  }
+
+  spreadsheetId = sId;
+  localStorage.setItem('sheets_db_spreadsheet_id', sId);
+  
+  // Map sheetIds safely
+  if (Array.isArray(createResult?.sheets)) {
+    createResult.sheets.forEach((sheet: any) => {
+      if (sheet?.properties?.title && sheet?.properties?.sheetId !== undefined) {
+        sheetIds[sheet.properties.title] = sheet.properties.sheetId;
+      }
+    });
+  } else {
+    defaultSheetTitles.forEach((title, idx) => {
+      sheetIds[title] = idx;
+    });
+  }
+  
+  // Seed initial data
+  await seedInitialData();
+  return sId;
+}
+
+// Fetch metadata to map Tab Title to Sheet ID (required for batchUpdates/deletes)
+async function fetchSheetMetadata() {
+  if (!spreadsheetId || currentAccessToken === 'local-token') return;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
+  const result = await apiFetch(url);
+  if (Array.isArray(result?.sheets)) {
+    result.sheets.forEach((sheet: any) => {
+      if (sheet?.properties?.title && sheet?.properties?.sheetId !== undefined) {
+        sheetIds[sheet.properties.title] = sheet.properties.sheetId;
+      }
+    });
+  }
+
+  // Ensure all required sheets exist (important for existing spreadsheets)
+  await ensureRequiredSheets();
+}
+
+// Ensure all required sheets exist, create them if missing
+async function ensureRequiredSheets() {
+  if (!spreadsheetId || currentAccessToken === 'local-token') return;
+  const requiredSheets = [
+    'Config', 
+    'Residents', 
+    'Payments', 
+    'Expenses', 
+    'Rules', 
+    'Craftsmen', 
+    'ChatMessages', 
+    'AdminDecisions', 
+    'Polls', 
+    'Complaints', 
+    'MaintenanceRequests', 
+    'Events',
+    'JoinRequests'
+  ];
+  const existingSheets = Object.keys(sheetIds);
+  const missingSheets = requiredSheets.filter(s => !existingSheets.includes(s));
+
+  if (missingSheets.length > 0) {
+    const requests = missingSheets.map(title => ({
+      addSheet: {
+        properties: { title }
+      }
+    }));
+
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+    const result = await apiFetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ requests })
+    });
+
+    // Update sheetIds with new sheets safely
+    if (Array.isArray(result?.replies)) {
+      result.replies.forEach((reply: any) => {
+        const sheet = reply?.addSheet;
+        if (sheet?.properties?.title && sheet?.properties?.sheetId !== undefined) {
+          sheetIds[sheet.properties.title] = sheet.properties.sheetId;
+        }
+      });
+    }
+
+    // Seed headers for missing sheets (clean - headers only)
+    for (const title of missingSheets) {
+      if (title === 'Craftsmen') {
+        const craftsmenValues = [
+          ['ID', 'Name', 'Specialty', 'Phone', 'Notes', 'AddedBy', 'Comments'],
+        ];
+        await writeSheetRange('Craftsmen!A1', craftsmenValues);
+      } else if (title === 'ChatMessages') {
+        const chatValues = [
+          ['ID', 'SenderName', 'FlatNumber', 'Text', 'Timestamp', 'ImageUrl'],
+        ];
+        await writeSheetRange('ChatMessages!A1', chatValues);
+      } else if (title === 'AdminDecisions') {
+        const decisionValues = [
+          ['ID', 'DecisionNumber', 'Title', 'Description', 'Category', 'Date', 'EffectiveDate', 'IssuedBy', 'Status', 'Notes'],
+        ];
+        await writeSheetRange('AdminDecisions!A1', decisionValues);
+      } else if (title === 'Polls') {
+        const pollValues = [
+          ['ID', 'Title', 'Description', 'Options', 'UserVotes', 'CreatedAt', 'EndDate', 'Status'],
+        ];
+        await writeSheetRange('Polls!A1', pollValues);
+      } else if (title === 'Complaints') {
+        const compValues = [
+          ['ID', 'Title', 'Description', 'FlatNumber', 'ResidentName', 'IsAnonymous', 'ImageUrl', 'Date', 'Comments'],
+        ];
+        await writeSheetRange('Complaints!A1', compValues);
+      } else if (title === 'MaintenanceRequests') {
+        const maintValues = [
+          ['ID', 'FlatNumber', 'ResidentName', 'Title', 'Description', 'Category', 'Status', 'Priority', 'Date', 'Notes'],
+        ];
+        await writeSheetRange('MaintenanceRequests!A1', maintValues);
+      } else if (title === 'Events') {
+        const eventValues = [
+          ['ID', 'Title', 'Description', 'Date', 'Time', 'Type', 'TargetAudience', 'Status'],
+        ];
+        await writeSheetRange('Events!A1', eventValues);
+      } else if (title === 'JoinRequests') {
+        const joinHeaders = [
+          ['ID', 'FlatNumber', 'ResidentType', 'OwnerName', 'OwnerPhone', 'TenantName', 'TenantPhone', 'Email', 'Password', 'Status', 'CreatedAt']
+        ];
+        await writeSheetRange('JoinRequests!A1', joinHeaders);
+      }
+    }
+  }
+}
+
+// Seed spreadsheet with column headers (Clean Slate - No Dummy Data)
+async function seedInitialData() {
+  if (!spreadsheetId) return;
+  
+  const configValues = [
+    ['Key', 'Value'],
+    ['expenseTypes', 'صيانة,كهرباء,مياه,أمن ونظافة,مصاعد,أخرى'],
+    ['paymentTypes', 'اشتراك شهري,صيانة طارئة,تحصيلات اخرى'],
+    ['activityTypes', 'سكني,سكني مغلق,مفروش,إداري,تجاري'],
+    ['admins', 'waheedsamaha8@gmail.com'], // default admin from the context email
+    ['managers', ''],
+    ['accountingStartDate', '2026-01-01'],
+    ['defaultMonthlyFee', '400'],
+    ['activityDefaultFees', JSON.stringify({ 'سكني': 400, 'سكني مغلق': 200, 'مفروش': 600, 'إداري': 800, 'تجاري': 500 })],
+  ];
+
+  const residentValues = [
+    ['ID', 'FlatNumber', 'Name', 'ActivityType', 'Phone', 'Notes', 'OwnershipType', 'TenantName', 'TenantPhone', 'MonthlyFee', 'InitialBalance'],
+  ];
+
+  const paymentValues = [
+    ['ID', 'Year', 'Month', 'ResidentID', 'PaymentType', 'Amount', 'ReceiptNumber', 'Notes', 'FileID', 'Date', 'IsManuallyPaid'],
+  ];
+
+  const expenseValues = [
+    ['ID', 'Year', 'Month', 'ExpenseType', 'Amount', 'Notes', 'FileID', 'Date'],
+  ];
+
+  const rulesValues = [
+    ['Rule'],
+    ['غير مسموح تمامًا تحويل الوحدات السكنية او الروف إلى فنادق أو غرف فندقية او أنشطة تجارية او إدارية.'],
+    ['غير مسموح تماما أي استخدامات تُسبب إزعاجا للسكان أو تُخل بالراحة و الهدوء والأمن.'],
+    ['ممنوع تأجير الوحدات للشركات إلا بعد موافقة اتحاد الملاك للتأكد من أن نشاط الشركة لن يخل بالهدوء.'],
+    ['ممنوع منعاً باتاً تأجير الوحدات المفروشة إلا للأسر فقط والتأكيد على عدم السماح بأي تجاوزات مخلة.'],
+    ['اعمال التشطيبات للشقق من الساعة ٨ صباحاً وحتى ٦ مساءً يومياً ماعدا يوم الجمعة.'],
+    ['ممنوع منعاً باتاً استخدام المصاعد في نقل الاثاث ومواد البناء ومخلفات التشطيبات لضمان سلامتها.'],
+  ];
+
+  const craftsmenValues = [
+    ['ID', 'Name', 'Specialty', 'Phone', 'Notes', 'AddedBy', 'Comments'],
+  ];
+
+  const chatValues = [
+    ['ID', 'SenderName', 'FlatNumber', 'Text', 'Timestamp', 'ImageUrl'],
+  ];
+
+  const decisionValues = [
+    ['ID', 'DecisionNumber', 'Title', 'Description', 'Category', 'Date', 'EffectiveDate', 'IssuedBy', 'Status', 'Notes'],
+  ];
+
+  const pollValues = [
+    ['ID', 'Title', 'Description', 'Options', 'UserVotes', 'CreatedAt', 'EndDate', 'Status'],
+  ];
+
+  const compValues = [
+    ['ID', 'Title', 'Description', 'FlatNumber', 'ResidentName', 'IsAnonymous', 'ImageUrl', 'Date', 'Comments'],
+  ];
+
+  const maintValues = [
+    ['ID', 'FlatNumber', 'ResidentName', 'Title', 'Description', 'Category', 'Status', 'Priority', 'Date', 'Notes'],
+  ];
+
+  const eventValues = [
+    ['ID', 'Title', 'Description', 'Date', 'Time', 'Type', 'TargetAudience', 'Status'],
+  ];
+
+  await writeSheetRange('Config!A1', configValues);
+  await writeSheetRange('Residents!A1', residentValues);
+  await writeSheetRange('Payments!A1', paymentValues);
+  await writeSheetRange('Expenses!A1', expenseValues);
+  await writeSheetRange('Rules!A1', rulesValues);
+  await writeSheetRange('Craftsmen!A1', craftsmenValues);
+  await writeSheetRange('ChatMessages!A1', chatValues);
+  await writeSheetRange('AdminDecisions!A1', decisionValues);
+  await writeSheetRange('Polls!A1', pollValues);
+  await writeSheetRange('Complaints!A1', compValues);
+  await writeSheetRange('MaintenanceRequests!A1', maintValues);
+  await writeSheetRange('Events!A1', eventValues);
+}
+
+// Low-level helper to write a range to a sheet
+async function writeSheetRange(range: string, values: string[][]) {
+  if (!spreadsheetId) return;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`;
+  await apiFetch(url, {
+    method: 'PUT',
+    body: JSON.stringify({ values }),
+  });
+}
+
+// Low-level helper to clear a range in a sheet
+async function clearSheetRange(range: string) {
+  if (!spreadsheetId) return;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}:clear`;
+  await apiFetch(url, {
+    method: 'POST',
+  });
+}
+
+// Low-level helper to append values to a sheet
+async function appendSheetRow(sheetName: string, values: string[][]) {
+  if (!spreadsheetId) return;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A1:append?valueInputOption=USER_ENTERED`;
+  await apiFetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ values }),
+  });
+}
+
+// Fetch config from Sheets Config tab
+export async function getAppConfig(): Promise<AppConfig> {
+  const defaultActivityFees: Record<string, number> = {
+    'سكني': 400,
+    'سكني مغلق': 200,
+    'مفروش': 600,
+    'إداري': 800,
+    'تجاري': 500,
+  };
+
+  const defaultAdminProfile: AdminResidentProfile = {
+    flatNumber: 207,
+    name: 'وحيد سماحة (رئيس الاتحاد)',
+    phone: '',
+    activityType: 'سكني',
+    ownershipType: 'تمليك',
+    monthlyFee: 400,
+    initialBalance: 0,
+    notes: 'رئيس اتحاد الملاك',
+  };
+
+  const config: AppConfig = {
+    expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
+    paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
+    activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري'],
+    admins: ['waheedsamaha8@gmail.com'],
+    managers: [],
+    accountingStartDate: '2026-01-01',
+    defaultMonthlyFee: 400,
+    activityDefaultFees: defaultActivityFees,
+    adminResidentProfile: defaultAdminProfile,
+  };
+
+  if (!spreadsheetId || currentAccessToken === 'local-token' || spreadsheetId === 'local-resident-spreadsheet' || spreadsheetId === 'pyramids-view-1-fallback-db') {
+    const cachedConfig = getLocalCache<AppConfig>('config');
+    if (cachedConfig) {
+      return { ...config, ...cachedConfig };
+    }
+    return config;
+  }
+
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Config!A1:B20`;
+    const result = await apiFetch(url);
+    const rows = Array.isArray(result?.values) ? result.values : [];
+    
+    rows.forEach((row: string[]) => {
+      if (!Array.isArray(row) || row.length < 2) return;
+      const [key, value] = row;
+      if (key === 'expenseTypes') config.expenseTypes = value.split(',').filter(Boolean);
+      if (key === 'paymentTypes') config.paymentTypes = value.split(',').filter(Boolean);
+      if (key === 'activityTypes') config.activityTypes = value.split(',').filter(Boolean);
+      if (key === 'admins') config.admins = value.split(',').filter(Boolean).map(e => e.toLowerCase().trim());
+      if (key === 'managers') config.managers = value.split(',').filter(Boolean).map(e => e.toLowerCase().trim());
+      if (key === 'accountingStartDate') config.accountingStartDate = value;
+      if (key === 'defaultMonthlyFee') config.defaultMonthlyFee = parseSheetNumber(value) || 400;
+      if (key === 'buildingLayout') {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            config.buildingLayout = parsed;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (key === 'activityDefaultFees') {
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed && typeof parsed === 'object') {
+            config.activityDefaultFees = { ...defaultActivityFees, ...parsed };
+          }
+        } catch {
+          config.activityDefaultFees = defaultActivityFees;
+        }
+      }
+      if (key === 'adminResidentProfile') {
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed && typeof parsed === 'object') {
+            config.adminResidentProfile = { ...defaultAdminProfile, ...parsed };
+          }
+        } catch {
+          config.adminResidentProfile = defaultAdminProfile;
+        }
+      }
+    });
+
+    if (!config.activityDefaultFees) {
+      config.activityDefaultFees = defaultActivityFees;
+    }
+    if (!config.adminResidentProfile) {
+      config.adminResidentProfile = defaultAdminProfile;
+    }
+
+    return config;
+  } catch (err) {
+    console.warn('Failed to fetch config from Google Sheets, using cached/default config:', err);
+    const cachedConfig = getLocalCache<AppConfig>('config');
+    return cachedConfig ? { ...config, ...cachedConfig } : config;
+  }
+}
+
+// Save config changes back to Sheet
+export async function saveAppConfig(config: AppConfig) {
+  const defaultActivityFees: Record<string, number> = {
+    'سكني': 400,
+    'سكني مغلق': 200,
+    'مفروش': 600,
+    'إداري': 800,
+    'تجاري': 500,
+  };
+
+  const values = [
+    ['Key', 'Value'],
+    ['expenseTypes', config.expenseTypes.join(',')],
+    ['paymentTypes', config.paymentTypes.join(',')],
+    ['activityTypes', config.activityTypes.join(',')],
+    ['admins', config.admins.join(',')],
+    ['managers', config.managers.join(',')],
+    ['accountingStartDate', config.accountingStartDate || '2026-01-01'],
+    ['defaultMonthlyFee', (config.defaultMonthlyFee || 400).toString()],
+    ['buildingLayout', JSON.stringify(config.buildingLayout || [])],
+    ['activityDefaultFees', JSON.stringify(config.activityDefaultFees || defaultActivityFees)],
+    ['adminResidentProfile', JSON.stringify(config.adminResidentProfile || null)],
+  ];
+  await writeSheetRange('Config!A1', values);
+}
+
+// Fetch Residents
+export async function getResidents(): Promise<Resident[]> {
+  const cached = getFromCache<Resident[]>('residents');
+  if (cached) return cached;
+  
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Residents!A2:K500`;
+  const result = await apiFetch(url);
+  const rows = result.values || [];
+  
+  const data = rows.map((row: string[]) => {
+    const parsedFlat = parseSheetInt(row[1]);
+    const parsedMonthlyFee = parseSheetNumberOptional(row[9]);
+    const parsedInitialBalance = parseSheetNumber(row[10]);
+    const rawNotes = row[5] || '';
+    const cleanNotes = rawNotes.includes('توليد تلقائي') ? '' : rawNotes;
+
+    return {
+      id: row[0],
+      flatNumber: parsedFlat,
+      name: row[2],
+      activityType: row[3] || 'سكني',
+      phone: row[4] || '',
+      notes: cleanNotes,
+      ownershipType: row[6] || 'تمليك',
+      tenantName: row[7] || '',
+      tenantPhone: row[8] || '',
+      monthlyFee: parsedMonthlyFee,
+      initialBalance: parsedInitialBalance,
+    };
+  }).filter((r: any) => r.id && r.flatNumber > 0);
+  
+  setInCache('residents', data);
+  return data;
+}
+
+// Add Resident
+export async function addResidentSheet(resident: Resident): Promise<void> {
+  const row = [
+    resident.id,
+    resident.flatNumber.toString(),
+    resident.name,
+    resident.activityType,
+    resident.phone || '',
+    resident.notes || '',
+    resident.ownershipType || 'تمليك',
+    resident.tenantName || '',
+    resident.tenantPhone || '',
+    (resident.monthlyFee ?? '').toString(),
+    (resident.initialBalance ?? 0).toString(),
+  ];
+  await appendSheetRow('Residents', [row]);
+  cache.residents.expiry = 0; // Invalidate cache AFTER successful mutation
+}
+
+// Set All Residents (Batch)
+export async function setAllResidentsSheet(residents: Resident[]): Promise<void> {
+  // 1. Clear the Residents sheet
+  await clearSheetRange('Residents!A1:K2000');
+  
+  // 2. Prepare headers and rows
+  const values = [
+    ['ID', 'FlatNumber', 'Name', 'ActivityType', 'Phone', 'Notes', 'OwnershipType', 'TenantName', 'TenantPhone', 'MonthlyFee', 'InitialBalance'],
+    ...residents.map(r => [
+      r.id,
+      r.flatNumber.toString(),
+      r.name,
+      r.activityType,
+      r.phone || '',
+      r.notes || '',
+      r.ownershipType || 'تمليك',
+      r.tenantName || '',
+      r.tenantPhone || '',
+      (r.monthlyFee ?? '').toString(),
+      (r.initialBalance ?? 0).toString(),
+    ])
+  ];
+  
+  // 3. Write new data
+  await writeSheetRange('Residents!A1', values);
+  cache.residents.expiry = 0;
+}
+
+// Helper to find exact physical sheet row index by ID in column A
+async function findRowIndexById(sheetTitle: string, id: string): Promise<number> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}!A2:A3000`;
+  const result = await apiFetch(url);
+  const rows = result.values || [];
+  return rows.findIndex((row: string[]) => row && row[0] && row[0].trim() === id.trim());
+}
+
+// Edit Resident
+export async function editResidentSheet(resident: Resident): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  
+  // Update internal cache immediately
+  if (cache.residents.data) {
+    const list = cache.residents.data as Resident[];
+    const idx = list.findIndex(r => (r.id && resident.id && r.id.trim().toLowerCase() === resident.id.trim().toLowerCase()) || r.flatNumber === resident.flatNumber);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...resident };
+    } else {
+      list.push(resident);
+    }
+    cache.residents.data = list;
+  }
+
+  // Find exact physical row index in Google Sheets
+  let rawRowIdx = await findRowIndexById('Residents', resident.id);
+  
+  // Fallback 1: Try finding by FlatNumber
+  if (rawRowIdx === -1 && resident.flatNumber) {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Residents!A2:B2000`;
+    const result = await apiFetch(url);
+    const rows = result.values || [];
+    rawRowIdx = rows.findIndex((row: string[]) => row && parseSheetInt(row[1]) === resident.flatNumber);
+  }
+
+  // Fallback 2: If still not found, append as a new resident to prevent error
+  if (rawRowIdx === -1) {
+    console.warn(`[Google API] Resident ${resident.name} with ID ${resident.id} not found for edit. Appending instead.`);
+    await addResidentSheet(resident);
+    return;
+  }
+  
+  const sheetRowNumber = rawRowIdx + 2; // Row offset (+1 for header, +1 for 1-based index)
+  const range = `Residents!A${sheetRowNumber}:K${sheetRowNumber}`;
+  const values = [[
+    resident.id,
+    resident.flatNumber.toString(),
+    resident.name,
+    resident.activityType,
+    resident.phone || '',
+    resident.notes || '',
+    resident.ownershipType || 'تمليك',
+    resident.tenantName || '',
+    resident.tenantPhone || '',
+    (resident.monthlyFee ?? '').toString(),
+    (resident.initialBalance ?? 0).toString(),
+  ]];
+  await writeSheetRange(range, values);
+  cache.residents.expiry = 0;
+}
+
+// Delete Resident (using batch update to delete the row)
+export async function deleteResidentSheet(residentId: string): Promise<void> {
+  if (cache.residents.data) {
+    cache.residents.data = (cache.residents.data as Resident[]).filter(r => r.id !== residentId);
+  }
+  const rawRowIdx = await findRowIndexById('Residents', residentId);
+  if (rawRowIdx === -1) {
+    console.warn(`[Google API Warning] Resident with ID ${residentId} not found during delete. Skipping.`);
+    return;
+  }
+  
+  const sheetRowIndex = rawRowIdx + 1; // 0-based index for API requests (excluding header row is rawRowIdx + 1)
+  await deleteSheetRow('Residents', sheetRowIndex);
+  cache.residents.expiry = 0;
+}
+
+// Fetch Payments
+export async function getPayments(): Promise<Payment[]> {
+  const cached = getFromCache<Payment[]>('payments');
+  if (cached) return cached;
+  
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Payments!A2:M2000`;
+  const result = await apiFetch(url);
+  const rows = result.values || [];
+  
+  const data = rows.map((row: string[]) => {
+    const parsedYear = parseSheetInt(row[1]);
+    const parsedFlat = parseSheetInt(row[5] || '0');
+    const parsedAmount = parseSheetNumber(row[7] || '0');
+    return {
+      id: row[0],
+      year: parsedYear || new Date().getFullYear(),
+      month: (row[2] || '').padStart(2, '0'),
+      residentId: row[3],
+      residentName: row[4] || '',
+      flatNumber: parsedFlat,
+      paymentType: row[6],
+      amount: parsedAmount,
+      receiptNumber: row[8] || '',
+      notes: row[9] || '',
+      fileId: row[10] || '',
+      fileUrl: row[10] ? `https://drive.google.com/uc?export=view&id=${row[10]}` : '',
+      date: row[11] || '',
+      isManuallyPaid: row[12] === 'TRUE',
+    };
+  }).filter((p: any) => p.id && p.year > 0);
+  
+  setInCache('payments', data);
+  return data;
+}
+
+// Add Payment
+export async function addPaymentSheet(payment: Payment): Promise<void> {
+  const row = [
+    payment.id,
+    payment.year.toString(),
+    payment.month,
+    payment.residentId,
+    payment.residentName,
+    payment.flatNumber.toString(),
+    payment.paymentType,
+    payment.amount.toString(),
+    payment.receiptNumber || '',
+    payment.notes || '',
+    payment.fileId || '',
+    payment.date || new Date().toISOString().split('T')[0],
+    payment.isManuallyPaid ? 'TRUE' : 'FALSE',
+  ];
+  await appendSheetRow('Payments', [row]);
+  cache.payments.expiry = 0;
+}
+
+// Edit Payment
+export async function editPaymentSheet(payment: Payment): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const rawRowIdx = await findRowIndexById('Payments', payment.id);
+  if (rawRowIdx === -1) throw new Error('لم يتم العثور على التحصيل.');
+  
+  const sheetRowNumber = rawRowIdx + 2;
+  const range = `Payments!A${sheetRowNumber}:M${sheetRowNumber}`;
+  const values = [[
+    payment.id,
+    payment.year.toString(),
+    payment.month,
+    payment.residentId,
+    payment.residentName,
+    payment.flatNumber.toString(),
+    payment.paymentType,
+    payment.amount.toString(),
+    payment.receiptNumber || '',
+    payment.notes || '',
+    payment.fileId || '',
+    payment.date,
+    payment.isManuallyPaid ? 'TRUE' : 'FALSE',
+  ]];
+  await writeSheetRange(range, values);
+  cache.payments.expiry = 0;
+}
+
+// Delete Payment
+export async function deletePaymentSheet(paymentId: string): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const rawRowIdx = await findRowIndexById('Payments', paymentId);
+  if (rawRowIdx === -1) {
+    console.warn(`[Google API Warning] Payment with ID ${paymentId} not found during delete. Skipping.`);
+    return;
+  }
+  
+  const sheetRowIndex = rawRowIdx + 1; // 0-based sheet index
+  await deleteSheetRow('Payments', sheetRowIndex);
+  cache.payments.expiry = 0;
+}
+
+// Fetch Expenses
+export async function getExpenses(): Promise<Expense[]> {
+  const cached = getFromCache<Expense[]>('expenses');
+  if (cached) return cached;
+  
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Expenses!A2:H1000`;
+  const result = await apiFetch(url);
+  const rows = result.values || [];
+  
+  const data = rows.map((row: string[]) => {
+    const parsedYear = parseSheetInt(row[1]);
+    const parsedAmount = parseSheetNumber(row[4] || '0');
+    return {
+      id: row[0],
+      year: parsedYear || new Date().getFullYear(),
+      month: (row[2] || '').padStart(2, '0'),
+      expenseType: row[3],
+      amount: parsedAmount,
+      notes: row[5] || '',
+      fileId: row[6] || '',
+      fileUrl: row[6] ? `https://drive.google.com/uc?export=view&id=${row[6]}` : '',
+      date: row[7] || '',
+    };
+  }).filter((e: any) => e.id && e.year > 0);
+  
+  setInCache('expenses', data);
+  return data;
+}
+
+// Add Expense
+export async function addExpenseSheet(expense: Expense): Promise<void> {
+  const row = [
+    expense.id,
+    expense.year.toString(),
+    expense.month,
+    expense.expenseType,
+    expense.amount.toString(),
+    expense.notes || '',
+    expense.fileId || '',
+    expense.date || new Date().toISOString().split('T')[0],
+  ];
+  await appendSheetRow('Expenses', [row]);
+  cache.expenses.expiry = 0;
+}
+
+// Edit Expense
+export async function editExpenseSheet(expense: Expense): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const rawRowIdx = await findRowIndexById('Expenses', expense.id);
+  if (rawRowIdx === -1) throw new Error('لم يتم العثور على المصروف.');
+  
+  const sheetRowNumber = rawRowIdx + 2;
+  const range = `Expenses!A${sheetRowNumber}:H${sheetRowNumber}`;
+  const values = [[
+    expense.id,
+    expense.year.toString(),
+    expense.month,
+    expense.expenseType,
+    expense.amount.toString(),
+    expense.notes || '',
+    expense.fileId || '',
+    expense.date,
+  ]];
+  await writeSheetRange(range, values);
+  cache.expenses.expiry = 0;
+}
+
+// Delete Expense
+export async function deleteExpenseSheet(expenseId: string): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const rawRowIdx = await findRowIndexById('Expenses', expenseId);
+  if (rawRowIdx === -1) {
+    console.warn(`[Google API Warning] Expense with ID ${expenseId} not found during delete. Skipping.`);
+    return;
+  }
+  
+  const sheetRowIndex = rawRowIdx + 1; // 0-based sheet index
+  await deleteSheetRow('Expenses', sheetRowIndex);
+  cache.expenses.expiry = 0;
+}
+
+// Fetch Building Rules
+export async function getBuildingRules(): Promise<BuildingRules> {
+  const cached = getFromCache<string[]>('rules');
+  if (cached) return { rules: cached };
+  
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Rules!A2:A100`;
+  const result = await apiFetch(url);
+  const rows = result.values || [];
+  
+  const rules = rows.map((row: string[]) => row[0]).filter(Boolean);
+  setInCache('rules', rules);
+  
+  return {
+    rules,
+  };
+}
+
+// Batch fetch all major data sheets to save quota
+export async function batchGetAllData(): Promise<{
+  residents: Resident[];
+  payments: Payment[];
+  expenses: Expense[];
+  rules: string[];
+  craftsmen: Craftsman[];
+  messages: ChatMessage[];
+  decisions: AdminDecision[];
+  polls: Poll[];
+  complaints: PublicComplaint[];
+  maintenance: MaintenanceRequest[];
+  events: BuildingEvent[];
+}> {
+  // Check if all data is cached
+  const cResidents = getFromCache<Resident[]>('residents');
+  const cPayments = getFromCache<Payment[]>('payments');
+  const cExpenses = getFromCache<Expense[]>('expenses');
+  const cRules = getFromCache<string[]>('rules');
+  const cCraftsmen = getFromCache<Craftsman[]>('craftsmen');
+  const cMessages = getFromCache<ChatMessage[]>('messages');
+  const cDecisions = getFromCache<AdminDecision[]>('decisions');
+  const cPolls = getFromCache<Poll[]>('polls');
+  const cComplaints = getFromCache<PublicComplaint[]>('complaints');
+  const cMaintenance = getFromCache<MaintenanceRequest[]>('maintenance');
+  const cEvents = getFromCache<BuildingEvent[]>('events');
+
+  if (cResidents && cPayments && cExpenses && cRules && cCraftsmen && cMessages && cDecisions && cPolls && cComplaints && cMaintenance && cEvents) {
+    return { 
+      residents: cResidents, 
+      payments: cPayments, 
+      expenses: cExpenses, 
+      rules: cRules, 
+      craftsmen: cCraftsmen,
+      messages: cMessages,
+      decisions: cDecisions,
+      polls: cPolls,
+      complaints: cComplaints,
+      maintenance: cMaintenance,
+      events: cEvents,
+    };
+  }
+
+  const getFallbackData = () => ({
+    residents: cResidents || getLocalCache<Resident[]>('residents') || [], 
+    payments: cPayments || getLocalCache<Payment[]>('payments') || [], 
+    expenses: cExpenses || getLocalCache<Expense[]>('expenses') || [], 
+    rules: cRules || getLocalCache<{ rules: string[] }>('rules')?.rules || [], 
+    craftsmen: cCraftsmen || getLocalCache<Craftsman[]>('craftsmen') || [],
+    messages: cMessages || getLocalCache<ChatMessage[]>('chat_messages') || getLocalCache<ChatMessage[]>('messages') || [],
+    decisions: cDecisions || getLocalCache<AdminDecision[]>('admin_decisions') || getLocalCache<AdminDecision[]>('decisions') || [],
+    polls: cPolls || getLocalCache<Poll[]>('polls') || [],
+    complaints: cComplaints || getLocalCache<PublicComplaint[]>('public_complaints') || getLocalCache<PublicComplaint[]>('complaints') || [],
+    maintenance: cMaintenance || getLocalCache<MaintenanceRequest[]>('maintenance') || [],
+    events: cEvents || getLocalCache<BuildingEvent[]>('events') || [],
+  });
+
+  if (!spreadsheetId || currentAccessToken === 'local-token' || spreadsheetId === 'local-resident-spreadsheet' || spreadsheetId === 'pyramids-view-1-fallback-db') {
+    return getFallbackData();
+  }
+
+  try {
+    const ranges = [
+    'Residents!A2:K1000',
+    'Payments!A2:M2000',
+    'Expenses!A2:H1000',
+    'Rules!A2:A200',
+    'Craftsmen!A2:G1000',
+    'ChatMessages!A2:F2000',
+    'AdminDecisions!A2:J500',
+    'Polls!A2:H500',
+    'Complaints!A2:I1000',
+    'MaintenanceRequests!A2:J1000',
+    'Events!A2:H500'
+  ];
+  
+  const queryParams = ranges.map(r => `ranges=${encodeURIComponent(r)}`).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?${queryParams}`;
+  
+  const result = await apiFetch(url);
+  const valueRanges = result.valueRanges || [];
+  
+  const residentsRows = valueRanges[0]?.values || [];
+  const paymentsRows = valueRanges[1]?.values || [];
+  const expensesRows = valueRanges[2]?.values || [];
+  const rulesRows = valueRanges[3]?.values || [];
+  const craftsmenRows = valueRanges[4]?.values || [];
+  const chatRows = valueRanges[5]?.values || [];
+  const decisionRows = valueRanges[6]?.values || [];
+  const pollRows = valueRanges[7]?.values || [];
+  const complaintRows = valueRanges[8]?.values || [];
+  const maintenanceRows = valueRanges[9]?.values || [];
+  const eventRows = valueRanges[10]?.values || [];
+  
+  const residents = residentsRows.map((row: string[]) => {
+    const parsedFlat = parseSheetInt(row[1]);
+    const parsedMonthlyFee = parseSheetNumberOptional(row[9]);
+    const parsedInitialBalance = parseSheetNumber(row[10]);
+    const rawNotes = row[5] || '';
+    const cleanNotes = rawNotes.includes('توليد تلقائي') ? '' : rawNotes;
+    
+    return {
+      id: row[0],
+      flatNumber: parsedFlat,
+      name: row[2] || '',
+      activityType: row[3] || 'سكني',
+      phone: row[4] || '',
+      notes: cleanNotes,
+      ownershipType: row[6] || 'تمليك',
+      tenantName: row[7] || '',
+      tenantPhone: row[8] || '',
+      monthlyFee: parsedMonthlyFee,
+      initialBalance: parsedInitialBalance,
+    };
+  }).filter((r: any) => r.id && r.flatNumber > 0);
+
+  const payments = paymentsRows.map((row: string[]) => {
+    const parsedYear = parseSheetInt(row[1]);
+    const parsedFlat = parseSheetInt(row[5] || '0');
+    const parsedAmount = parseSheetNumber(row[7] || '0');
+    return {
+      id: row[0],
+      year: parsedYear || new Date().getFullYear(),
+      month: (row[2] || '').padStart(2, '0'),
+      residentId: row[3],
+      residentName: row[4] || '',
+      flatNumber: parsedFlat,
+      paymentType: row[6],
+      amount: parsedAmount,
+      receiptNumber: row[8] || '',
+      notes: row[9] || '',
+      fileId: row[10] || '',
+      fileUrl: row[10] ? `https://drive.google.com/uc?export=view&id=${row[10]}` : '',
+      date: row[11] || '',
+      isManuallyPaid: row[12] === 'TRUE',
+    };
+  }).filter((p: any) => p.id && p.year > 0);
+
+  const expenses = expensesRows.map((row: string[]) => {
+    const parsedYear = parseSheetInt(row[1]);
+    const parsedAmount = parseSheetNumber(row[4] || '0');
+    return {
+      id: row[0],
+      year: parsedYear || new Date().getFullYear(),
+      month: (row[2] || '').padStart(2, '0'),
+      expenseType: row[3],
+      amount: parsedAmount,
+      notes: row[5] || '',
+      fileId: row[6] || '',
+      fileUrl: row[6] ? `https://drive.google.com/uc?export=view&id=${row[6]}` : '',
+      date: row[7] || '',
+    };
+  }).filter((e: any) => e.id && e.year > 0);
+
+  const rules = rulesRows.map((row: string[]) => row[0]).filter(Boolean);
+
+  const craftsmen: Craftsman[] = craftsmenRows.map((row: string[]) => {
+    let comments: CraftsmanComment[] = [];
+    if (row[6]) {
+      try {
+        comments = JSON.parse(row[6]);
+        if (!Array.isArray(comments)) comments = [];
+      } catch (e) {
+        comments = [];
+      }
+    }
+    return {
+      id: row[0],
+      name: row[1] || '',
+      specialty: row[2] || '',
+      phone: row[3] || '',
+      notes: row[4] || '',
+      addedBy: row[5] || '',
+      comments,
+    };
+  }).filter((c: any) => c.id && c.name);
+
+  const messages: ChatMessage[] = chatRows.map((row: string[]) => {
+    const flatNum = parseSheetIntOptional(row[2]);
+    return {
+      id: row[0],
+      senderName: row[1] || '',
+      flatNumber: flatNum,
+      text: row[3] || '',
+      timestamp: row[4] || new Date().toISOString(),
+      imageUrl: row[5] || undefined,
+    };
+  }).filter((m: any) => m.id && (m.text || m.imageUrl));
+
+  const decisions: AdminDecision[] = decisionRows.map((row: string[]) => {
+    return {
+      id: row[0],
+      decisionNumber: row[1] || '',
+      title: row[2] || '',
+      description: row[3] || '',
+      category: (row[4] as any) || 'تنظيمي',
+      date: row[5] || '',
+      effectiveDate: row[6] || undefined,
+      issuedBy: row[7] || 'مجلس إدارة اتحاد الملاك',
+      status: (row[8] as any) || 'ACTIVE',
+      notes: row[9] || undefined,
+    };
+  }).filter((d: any) => d.id && d.title);
+
+  const polls: Poll[] = pollRows.map((row: string[]) => {
+    let options = [];
+    let userVotes = {};
+    try {
+      options = row[3] ? JSON.parse(row[3]) : [];
+    } catch (e) {
+      options = [];
+    }
+    try {
+      userVotes = row[4] ? JSON.parse(row[4]) : {};
+    } catch (e) {
+      userVotes = {};
+    }
+    return {
+      id: row[0],
+      title: row[1] || '',
+      description: row[2] || '',
+      options,
+      userVotes,
+      createdAt: row[5] || new Date().toISOString().split('T')[0],
+      endDate: row[6] || '',
+      status: (row[7] as any) || 'ACTIVE',
+    };
+  }).filter((p: any) => p.id && p.title);
+
+  const complaints: PublicComplaint[] = complaintRows.map((row: string[]) => {
+    const flatNum = parseSheetIntOptional(row[3]);
+    let comments = [];
+    try {
+      comments = row[8] ? JSON.parse(row[8]) : [];
+    } catch (e) {
+      comments = [];
+    }
+    return {
+      id: row[0],
+      title: row[1] || '',
+      description: row[2] || '',
+      flatNumber: flatNum,
+      residentName: row[4] || '',
+      isAnonymous: row[5] === 'TRUE',
+      imageUrl: row[6] || undefined,
+      date: row[7] || new Date().toISOString().split('T')[0],
+      comments,
+    };
+  }).filter((c: any) => c.id && c.title);
+
+  const maintenance: MaintenanceRequest[] = maintenanceRows.map((row: string[]) => {
+    const flatNum = parseSheetInt(row[1]);
+    return {
+      id: row[0],
+      flatNumber: isNaN(flatNum) ? 0 : flatNum,
+      residentName: row[2] || '',
+      title: row[3] || '',
+      description: row[4] || '',
+      category: (row[5] as any) || 'أخرى',
+      status: (row[6] as any) || 'PENDING',
+      priority: (row[7] as any) || 'MEDIUM',
+      date: row[8] || new Date().toISOString().split('T')[0],
+      notes: row[9] || undefined,
+    };
+  }).filter((m: any) => m.id && m.title);
+
+  const events: BuildingEvent[] = eventRows.map((row: string[]) => {
+    return {
+      id: row[0],
+      title: row[1] || '',
+      description: row[2] || '',
+      date: row[3] || new Date().toISOString().split('T')[0],
+      time: row[4] || undefined,
+      type: (row[5] as any) || 'OTHER',
+      targetAudience: (row[6] as any) || 'ALL',
+      status: (row[7] as any) || 'SCHEDULED',
+    };
+  }).filter((e: any) => e.id && e.title);
+
+  // Populate cache
+  setInCache('residents', residents);
+  setInCache('payments', payments);
+  setInCache('expenses', expenses);
+  setInCache('rules', rules);
+  setInCache('craftsmen', craftsmen);
+  setInCache('messages', messages);
+  setInCache('decisions', decisions);
+  setInCache('polls', polls);
+  setInCache('complaints', complaints);
+  setInCache('maintenance', maintenance);
+  setInCache('events', events);
+
+    return { 
+      residents, 
+      payments, 
+      expenses, 
+      rules, 
+      craftsmen,
+      messages,
+      decisions,
+      polls,
+      complaints,
+      maintenance,
+      events
+    };
+  } catch (error) {
+    console.warn('Failed to batch fetch all data from Google Sheets, using fallback cache:', error);
+    return getFallbackData();
+  }
+}
+
+// Save Building Rules
+export async function saveBuildingRulesSheet(rules: string[]) {
+  // Clear original contents first
+  const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Rules!A2:A100:clear`;
+  await apiFetch(clearUrl, { method: 'POST' });
+  
+  const values = rules.map(rule => [rule]);
+  await writeSheetRange('Rules!A2', values);
+  cache.rules.expiry = 0;
+}
+
+// Helper to delete a row by index in a specific Sheet tab
+async function deleteSheetRow(sheetTitle: string, rowIndex: number) {
+  if (!spreadsheetId) return;
+  const sheetId = sheetIds[sheetTitle];
+  if (sheetId === undefined) return;
+  
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  const body = {
+    requests: [
+      {
+        deleteDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: rowIndex,
+            endIndex: rowIndex + 1,
+          },
+        },
+      },
+    ],
+  };
+  
+  await apiFetch(url, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+// 2. Google Drive File Upload Service
+export async function uploadFileToDrive(fileName: string, base64Data: string, mimeType: string = 'image/jpeg'): Promise<string> {
+  checkAuth();
+  
+  // Convert base64 back to raw binary data
+  const base64Content = base64Data.split(',')[1] || base64Data;
+  const byteCharacters = atob(base64Content);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const fileBlob = new Blob([byteArray], { type: mimeType });
+
+  // Drive Multipart Upload endpoint
+  const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  
+  const metadata = {
+    name: fileName,
+    mimeType: mimeType,
+  };
+  
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', fileBlob);
+  
+  const headers = {
+    'Authorization': `Bearer ${currentAccessToken}`,
+  };
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  
+  if (!response.ok) {
+    const errorMsg = await response.text();
+    throw new Error(`Google Drive Upload Error: ${errorMsg}`);
+  }
+  
+  const fileData = await response.json();
+  const fileId = fileData.id;
+  
+  // Make file publicly readable so it can be previewed seamlessly
+  try {
+    const permissionUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`;
+    await fetch(permissionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAccessToken}`,
+      },
+      body: JSON.stringify({
+        role: 'reader',
+        type: 'anyone',
+      }),
+    });
+  } catch (err) {
+    console.warn('Could not set file permission to public:', err);
+  }
+  
+  return fileId;
+}
+
+// Craftsmen Management
+export async function addCraftsmanSheet(craftsman: Craftsman) {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const commentsJson = craftsman.comments && craftsman.comments.length > 0 ? JSON.stringify(craftsman.comments) : '[]';
+  const values = [
+    [craftsman.id, craftsman.name, craftsman.specialty, craftsman.phone, craftsman.notes || '', craftsman.addedBy, commentsJson]
+  ];
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Craftsmen!A:G:append?valueInputOption=USER_ENTERED`;
+  await apiFetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ values }),
+  });
+  cache.craftsmen.expiry = 0;
+}
+
+export async function editCraftsmanSheet(craftsman: Craftsman) {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).craftsmen;
+  const rowIndex = all.findIndex(c => c.id === craftsman.id);
+  if (rowIndex === -1) throw new Error('لم يتم العثور على الفني لتعديله');
+  
+  const commentsJson = craftsman.comments && craftsman.comments.length > 0 ? JSON.stringify(craftsman.comments) : '[]';
+  const range = `Craftsmen!A${rowIndex + 2}:G${rowIndex + 2}`;
+  const values = [
+    [craftsman.id, craftsman.name, craftsman.specialty, craftsman.phone, craftsman.notes || '', craftsman.addedBy, commentsJson]
+  ];
+  await writeSheetRange(range, values);
+  cache.craftsmen.expiry = 0;
+}
+
+export async function deleteCraftsmanSheet(id: string) {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).craftsmen;
+  const rowIndex = all.findIndex(c => c.id === id);
+  if (rowIndex === -1) return;
+
+  const sheetId = sheetIds['Craftsmen'];
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  await apiFetch(url, {
+    method: 'POST',
+    body: JSON.stringify({
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: rowIndex + 1,
+            endIndex: rowIndex + 2,
+          }
+        }
+      }]
+    })
+  });
+  cache.craftsmen.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Chat Messages Sheet Operations
+// ----------------------------------------------------
+export async function addChatMessageSheet(msg: ChatMessage): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const row = [
+    msg.id,
+    msg.senderName,
+    msg.flatNumber !== undefined ? msg.flatNumber.toString() : '',
+    msg.text || '',
+    msg.timestamp,
+    msg.imageUrl || '',
+  ];
+  await appendSheetRow('ChatMessages', [row]);
+  cache.messages.expiry = 0;
+}
+
+export async function setAllChatMessagesSheet(messages: ChatMessage[]): Promise<void> {
+  await clearSheetRange('ChatMessages!A1:F5000');
+  const values = [
+    ['ID', 'SenderName', 'FlatNumber', 'Text', 'Timestamp', 'ImageUrl'],
+    ...messages.map(m => [
+      m.id,
+      m.senderName,
+      m.flatNumber !== undefined ? m.flatNumber.toString() : '',
+      m.text || '',
+      m.timestamp,
+      m.imageUrl || '',
+    ])
+  ];
+  await writeSheetRange('ChatMessages!A1', values);
+  cache.messages.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Admin Decisions Sheet Operations
+// ----------------------------------------------------
+export async function addAdminDecisionSheet(decision: AdminDecision): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const row = [
+    decision.id,
+    decision.decisionNumber,
+    decision.title,
+    decision.description,
+    decision.category,
+    decision.date,
+    decision.effectiveDate || '',
+    decision.issuedBy,
+    decision.status,
+    decision.notes || '',
+  ];
+  await appendSheetRow('AdminDecisions', [row]);
+  cache.decisions.expiry = 0;
+}
+
+export async function editAdminDecisionSheet(decision: AdminDecision): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).decisions;
+  const rowIndex = all.findIndex(d => d.id === decision.id);
+  if (rowIndex === -1) throw new Error('لم يتم العثور على القرار الإداري.');
+
+  const range = `AdminDecisions!A${rowIndex + 2}:J${rowIndex + 2}`;
+  const values = [[
+    decision.id,
+    decision.decisionNumber,
+    decision.title,
+    decision.description,
+    decision.category,
+    decision.date,
+    decision.effectiveDate || '',
+    decision.issuedBy,
+    decision.status,
+    decision.notes || '',
+  ]];
+  await writeSheetRange(range, values);
+  cache.decisions.expiry = 0;
+}
+
+export async function deleteAdminDecisionSheet(id: string): Promise<void> {
+  if (!spreadsheetId) return;
+  const all = (await batchGetAllData()).decisions;
+  const rowIndex = all.findIndex(d => d.id === id);
+  if (rowIndex === -1) return;
+
+  await deleteSheetRow('AdminDecisions', rowIndex + 1);
+  cache.decisions.expiry = 0;
+}
+
+export async function setAllAdminDecisionsSheet(decisions: AdminDecision[]): Promise<void> {
+  await clearSheetRange('AdminDecisions!A1:J2000');
+  const values = [
+    ['ID', 'DecisionNumber', 'Title', 'Description', 'Category', 'Date', 'EffectiveDate', 'IssuedBy', 'Status', 'Notes'],
+    ...decisions.map(d => [
+      d.id,
+      d.decisionNumber,
+      d.title,
+      d.description,
+      d.category,
+      d.date,
+      d.effectiveDate || '',
+      d.issuedBy,
+      d.status,
+      d.notes || '',
+    ])
+  ];
+  await writeSheetRange('AdminDecisions!A1', values);
+  cache.decisions.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Polls & Voting Sheet Operations
+// ----------------------------------------------------
+export async function addPollSheet(poll: Poll): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const row = [
+    poll.id,
+    poll.title,
+    poll.description,
+    JSON.stringify(poll.options || []),
+    JSON.stringify(poll.userVotes || {}),
+    poll.createdAt,
+    poll.endDate,
+    poll.status,
+  ];
+  await appendSheetRow('Polls', [row]);
+  cache.polls.expiry = 0;
+}
+
+export async function editPollSheet(poll: Poll): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).polls;
+  const rowIndex = all.findIndex(p => p.id === poll.id);
+  if (rowIndex === -1) throw new Error('لم يتم العثور على الاستبيان.');
+
+  const range = `Polls!A${rowIndex + 2}:H${rowIndex + 2}`;
+  const values = [[
+    poll.id,
+    poll.title,
+    poll.description,
+    JSON.stringify(poll.options || []),
+    JSON.stringify(poll.userVotes || {}),
+    poll.createdAt,
+    poll.endDate,
+    poll.status,
+  ]];
+  await writeSheetRange(range, values);
+  cache.polls.expiry = 0;
+}
+
+export async function deletePollSheet(id: string): Promise<void> {
+  if (!spreadsheetId) return;
+  const all = (await batchGetAllData()).polls;
+  const rowIndex = all.findIndex(p => p.id === id);
+  if (rowIndex === -1) return;
+
+  await deleteSheetRow('Polls', rowIndex + 1);
+  cache.polls.expiry = 0;
+}
+
+export async function setAllPollsSheet(polls: Poll[]): Promise<void> {
+  await clearSheetRange('Polls!A1:H1000');
+  const values = [
+    ['ID', 'Title', 'Description', 'Options', 'UserVotes', 'CreatedAt', 'EndDate', 'Status'],
+    ...polls.map(p => [
+      p.id,
+      p.title,
+      p.description,
+      JSON.stringify(p.options || []),
+      JSON.stringify(p.userVotes || {}),
+      p.createdAt,
+      p.endDate,
+      p.status,
+    ])
+  ];
+  await writeSheetRange('Polls!A1', values);
+  cache.polls.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Complaints Sheet Operations
+// ----------------------------------------------------
+export async function addComplaintSheet(complaint: PublicComplaint): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const row = [
+    complaint.id,
+    complaint.title,
+    complaint.description,
+    complaint.flatNumber !== undefined ? complaint.flatNumber.toString() : '',
+    complaint.residentName,
+    complaint.isAnonymous ? 'TRUE' : 'FALSE',
+    complaint.imageUrl || '',
+    complaint.date,
+    JSON.stringify(complaint.comments || []),
+  ];
+  await appendSheetRow('Complaints', [row]);
+  cache.complaints.expiry = 0;
+}
+
+export async function editComplaintSheet(complaint: PublicComplaint): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).complaints;
+  const rowIndex = all.findIndex(c => c.id === complaint.id);
+  if (rowIndex === -1) throw new Error('لم يتم العثور على الشكوى.');
+
+  const range = `Complaints!A${rowIndex + 2}:I${rowIndex + 2}`;
+  const values = [[
+    complaint.id,
+    complaint.title,
+    complaint.description,
+    complaint.flatNumber !== undefined ? complaint.flatNumber.toString() : '',
+    complaint.residentName,
+    complaint.isAnonymous ? 'TRUE' : 'FALSE',
+    complaint.imageUrl || '',
+    complaint.date,
+    JSON.stringify(complaint.comments || []),
+  ]];
+  await writeSheetRange(range, values);
+  cache.complaints.expiry = 0;
+}
+
+export async function deleteComplaintSheet(id: string): Promise<void> {
+  if (!spreadsheetId) return;
+  const all = (await batchGetAllData()).complaints;
+  const rowIndex = all.findIndex(c => c.id === id);
+  if (rowIndex === -1) return;
+
+  await deleteSheetRow('Complaints', rowIndex + 1);
+  cache.complaints.expiry = 0;
+}
+
+export async function setAllComplaintsSheet(complaints: PublicComplaint[]): Promise<void> {
+  await clearSheetRange('Complaints!A1:I2000');
+  const values = [
+    ['ID', 'Title', 'Description', 'FlatNumber', 'ResidentName', 'IsAnonymous', 'ImageUrl', 'Date', 'Comments'],
+    ...complaints.map(c => [
+      c.id,
+      c.title,
+      c.description,
+      c.flatNumber !== undefined ? c.flatNumber.toString() : '',
+      c.residentName,
+      c.isAnonymous ? 'TRUE' : 'FALSE',
+      c.imageUrl || '',
+      c.date,
+      JSON.stringify(c.comments || []),
+    ])
+  ];
+  await writeSheetRange('Complaints!A1', values);
+  cache.complaints.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Maintenance Requests Sheet Operations
+// ----------------------------------------------------
+export async function addMaintenanceRequestSheet(req: MaintenanceRequest): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const row = [
+    req.id,
+    req.flatNumber.toString(),
+    req.residentName,
+    req.title,
+    req.description,
+    req.category,
+    req.status,
+    req.priority,
+    req.date,
+    req.notes || '',
+  ];
+  await appendSheetRow('MaintenanceRequests', [row]);
+  cache.maintenance.expiry = 0;
+}
+
+export async function editMaintenanceRequestSheet(req: MaintenanceRequest): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).maintenance;
+  const rowIndex = all.findIndex(m => m.id === req.id);
+  if (rowIndex === -1) throw new Error('لم يتم العثور على طلب الصيانة.');
+
+  const range = `MaintenanceRequests!A${rowIndex + 2}:J${rowIndex + 2}`;
+  const values = [[
+    req.id,
+    req.flatNumber.toString(),
+    req.residentName,
+    req.title,
+    req.description,
+    req.category,
+    req.status,
+    req.priority,
+    req.date,
+    req.notes || '',
+  ]];
+  await writeSheetRange(range, values);
+  cache.maintenance.expiry = 0;
+}
+
+export async function deleteMaintenanceRequestSheet(id: string): Promise<void> {
+  if (!spreadsheetId) return;
+  const all = (await batchGetAllData()).maintenance;
+  const rowIndex = all.findIndex(m => m.id === id);
+  if (rowIndex === -1) return;
+
+  await deleteSheetRow('MaintenanceRequests', rowIndex + 1);
+  cache.maintenance.expiry = 0;
+}
+
+export async function setAllMaintenanceRequestsSheet(reqs: MaintenanceRequest[]): Promise<void> {
+  await clearSheetRange('MaintenanceRequests!A1:J2000');
+  const values = [
+    ['ID', 'FlatNumber', 'ResidentName', 'Title', 'Description', 'Category', 'Status', 'Priority', 'Date', 'Notes'],
+    ...reqs.map(r => [
+      r.id,
+      r.flatNumber.toString(),
+      r.residentName,
+      r.title,
+      r.description,
+      r.category,
+      r.status,
+      r.priority,
+      r.date,
+      r.notes || '',
+    ])
+  ];
+  await writeSheetRange('MaintenanceRequests!A1', values);
+  cache.maintenance.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Events Sheet Operations
+// ----------------------------------------------------
+export async function addEventSheet(event: BuildingEvent): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const row = [
+    event.id,
+    event.title,
+    event.description,
+    event.date,
+    event.time || '',
+    event.type,
+    event.targetAudience,
+    event.status,
+  ];
+  await appendSheetRow('Events', [row]);
+  cache.events.expiry = 0;
+}
+
+export async function editEventSheet(event: BuildingEvent): Promise<void> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const all = (await batchGetAllData()).events;
+  const rowIndex = all.findIndex(e => e.id === event.id);
+  if (rowIndex === -1) throw new Error('لم يتم العثور على الموعد / الفعالية.');
+
+  const range = `Events!A${rowIndex + 2}:H${rowIndex + 2}`;
+  const values = [[
+    event.id,
+    event.title,
+    event.description,
+    event.date,
+    event.time || '',
+    event.type,
+    event.targetAudience,
+    event.status,
+  ]];
+  await writeSheetRange(range, values);
+  cache.events.expiry = 0;
+}
+
+export async function deleteEventSheet(id: string): Promise<void> {
+  if (!spreadsheetId) return;
+  const all = (await batchGetAllData()).events;
+  const rowIndex = all.findIndex(e => e.id === id);
+  if (rowIndex === -1) return;
+
+  await deleteSheetRow('Events', rowIndex + 1);
+  cache.events.expiry = 0;
+}
+
+export async function setAllEventsSheet(events: BuildingEvent[]): Promise<void> {
+  await clearSheetRange('Events!A1:H1000');
+  const values = [
+    ['ID', 'Title', 'Description', 'Date', 'Time', 'Type', 'TargetAudience', 'Status'],
+    ...events.map(e => [
+      e.id,
+      e.title,
+      e.description,
+      e.date,
+      e.time || '',
+      e.type,
+      e.targetAudience,
+      e.status,
+    ])
+  ];
+  await writeSheetRange('Events!A1', values);
+  cache.events.expiry = 0;
+}
+
+// ----------------------------------------------------
+// Save All Communication & Management Data in Bulk
+// ----------------------------------------------------
+export async function syncAllCommunicationDataToSheets(data: {
+  messages?: ChatMessage[];
+  decisions?: AdminDecision[];
+  polls?: Poll[];
+  complaints?: PublicComplaint[];
+  maintenance?: MaintenanceRequest[];
+  craftsmen?: Craftsman[];
+  events?: BuildingEvent[];
+}): Promise<void> {
+  if (data.messages) await setAllChatMessagesSheet(data.messages);
+  if (data.decisions) await setAllAdminDecisionsSheet(data.decisions);
+  if (data.polls) await setAllPollsSheet(data.polls);
+  if (data.complaints) await setAllComplaintsSheet(data.complaints);
+  if (data.maintenance) await setAllMaintenanceRequestsSheet(data.maintenance);
+  if (data.events) await setAllEventsSheet(data.events);
+  if (data.craftsmen) {
+    await clearSheetRange('Craftsmen!A1:G1000');
+    const values = [
+      ['ID', 'Name', 'Specialty', 'Phone', 'Notes', 'AddedBy', 'Comments'],
+      ...data.craftsmen.map(c => [
+        c.id,
+        c.name,
+        c.specialty,
+        c.phone,
+        c.notes || '',
+        c.addedBy,
+        c.comments && c.comments.length > 0 ? JSON.stringify(c.comments) : '[]'
+      ])
+    ];
+    await writeSheetRange('Craftsmen!A1', values);
+    cache.craftsmen.expiry = 0;
+  }
+}
+
+// Fetch file as blob for secure preview
+export async function getFileBlob(fileId: string): Promise<Blob> {
+  checkAuth();
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${currentAccessToken}`,
+      },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Google Drive API error (${response.status}):`, errorText);
+      if (response.status === 403) {
+        throw new Error('صلاحيات غير كافية لعرض الصورة. قد تحتاج لتسجيل الخروج والدخول مجدداً.');
+      }
+      throw new Error('فشل تحميل ملف الصورة من Google Drive');
+    }
+    return response.blob();
+  } catch (err: any) {
+    console.error('Network or API error during getFileBlob:', err);
+    throw err;
+  }
+}
+
+// Fetch JoinRequests
+export async function getJoinRequests(): Promise<JoinRequest[]> {
+  if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/JoinRequests!A2:K1000`;
+  const result = await apiFetch(url);
+  const rows = result.values || [];
+  
+  return rows.map((row: string[]) => ({
+    id: row[0] || '',
+    flatNumber: parseSheetInt(row[1]) || 0,
+    residentType: (row[2] || 'OWNER') as 'OWNER' | 'TENANT',
+    ownerName: row[3] || '',
+    ownerPhone: row[4] || '',
+    tenantName: row[5] || '',
+    tenantPhone: row[6] || '',
+    email: (row[7] || '').toLowerCase().trim(),
+    password: row[8] || '',
+    status: (row[9] || 'PENDING') as 'PENDING' | 'APPROVED' | 'DECLINED',
+    createdAt: row[10] || '',
+  }));
+}
+
+// Add JoinRequest
+export async function addJoinRequest(req: JoinRequest): Promise<void> {
+  const row = [
+    req.id,
+    req.flatNumber.toString(),
+    req.residentType,
+    req.ownerName,
+    req.ownerPhone,
+    req.tenantName,
+    req.tenantPhone,
+    req.email.toLowerCase().trim(),
+    req.password || '',
+    req.status,
+    req.createdAt,
+  ];
+  await appendSheetRow('JoinRequests', [row]);
+}
+
+// Update JoinRequest Status
+export async function updateJoinRequestStatus(id: string, status: 'APPROVED' | 'DECLINED'): Promise<void> {
+  const requests = await getJoinRequests();
+  const idx = requests.findIndex(r => r.id === id);
+  if (idx === -1) {
+    console.warn('تنبيه: طلب الانضمام غير موجود في جدول بيانات جوجل (Google Sheets)، ربما تم تسجيله محلياً فقط.');
+    return;
+  }
+  
+  const sheetRowNumber = idx + 2; // offset
+  const range = `JoinRequests!J${sheetRowNumber}`;
+  await writeSheetRange(range, [[status]]);
+}
+
+// Delete JoinRequest
+export async function deleteJoinRequestSheet(id: string): Promise<void> {
+  const requests = await getJoinRequests();
+  const idx = requests.findIndex(r => r.id === id);
+  if (idx === -1) {
+    console.warn('تنبيه: طلب الانضمام غير موجود في جدول بيانات جوجل (Google Sheets)، ربما تم تسجيله محلياً فقط.');
+    return;
+  }
+  
+  const sheetRowNumber = idx + 1; // offset
+  await deleteSheetRow('JoinRequests', sheetRowNumber);
+}
+
