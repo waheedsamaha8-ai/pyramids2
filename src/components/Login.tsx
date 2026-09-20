@@ -67,7 +67,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     } catch {
       // ignore
     }
-    return 'عمارة التقوى';
+    return 'اتحاد الملاك';
   });
   const [adminPhone, setAdminPhone] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
@@ -143,6 +143,39 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         if (data.flatNumber) {
           localStorage.setItem('resident_flat_number', data.flatNumber.toString());
         }
+
+        // Sync admin profile and building into application settings
+        if (data.role === 'ADMIN') {
+          try {
+            const raw = localStorage.getItem('custom_app_config');
+            const existingConfig = raw ? JSON.parse(raw) : {};
+            if ((data as any).buildingName) {
+              existingConfig.buildingName = (data as any).buildingName;
+            }
+            if (!existingConfig.adminResidentProfile) {
+              existingConfig.adminResidentProfile = {
+                flatNumber: 101,
+                name: data.name || 'محمد احمد (رئيس الاتحاد)',
+                phone: '',
+                activityType: 'سكني',
+                ownershipType: 'تمليك',
+                monthlyFee: 400,
+                initialBalance: 0,
+                notes: 'رئيس اتحاد الملاك',
+              };
+            } else if (data.name) {
+              existingConfig.adminResidentProfile.name = data.name;
+            }
+            if (!existingConfig.admins) existingConfig.admins = [];
+            if (!existingConfig.admins.includes(data.email.toLowerCase().trim())) {
+              existingConfig.admins.push(data.email.toLowerCase().trim());
+            }
+            localStorage.setItem('custom_app_config', JSON.stringify(existingConfig));
+          } catch {
+            // ignore
+          }
+        }
+
         const user = {
           email: data.email,
           displayName: data.name,
@@ -177,7 +210,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setSuccessMessage(null);
 
     try {
-      const selectedBuildingName = buildingNameInput.trim() || 'عمارة التقوى';
+      const selectedBuildingName = buildingNameInput.trim() || 'اتحاد الملاك';
       const selectedAdminName = adminName.trim() || 'محمد احمد';
 
       const data = await registerAdmin({
@@ -186,16 +219,34 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         email: adminEmail.trim(),
         password: adminPassword.trim(),
         securityKey: adminSecurityKey.trim(),
+        buildingName: selectedBuildingName,
       });
 
-      // Save buildingName, security code, and admin profile to local cache config
+      // Save buildingName, security code, and admin profile directly to application settings config
       try {
         const raw = localStorage.getItem('custom_app_config');
         const existingConfig = raw ? JSON.parse(raw) : {};
         existingConfig.buildingName = selectedBuildingName;
         existingConfig.adminSecurityCode = adminSecurityKey.trim();
-        if (!existingConfig.adminResidentProfile) existingConfig.adminResidentProfile = {};
-        existingConfig.adminResidentProfile.name = selectedAdminName;
+        if (!existingConfig.admins) existingConfig.admins = [];
+        if (!existingConfig.admins.includes(adminEmail.toLowerCase().trim())) {
+          existingConfig.admins.push(adminEmail.toLowerCase().trim());
+        }
+        if (!existingConfig.adminResidentProfile) {
+          existingConfig.adminResidentProfile = {
+            flatNumber: 101,
+            name: selectedAdminName,
+            phone: adminPhone.trim(),
+            activityType: 'سكني',
+            ownershipType: 'تمليك',
+            monthlyFee: 400,
+            initialBalance: 0,
+            notes: 'رئيس اتحاد الملاك',
+          };
+        } else {
+          existingConfig.adminResidentProfile.name = selectedAdminName;
+          existingConfig.adminResidentProfile.phone = adminPhone.trim();
+        }
         localStorage.setItem('custom_app_config', JSON.stringify(existingConfig));
         setStoredAdminSecurityCode(adminSecurityKey.trim());
       } catch {

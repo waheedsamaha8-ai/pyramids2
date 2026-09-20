@@ -60,7 +60,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const [newRuleInput, setNewRuleInput] = useState('');
 
   // Building & Security Code state
-  const [buildingName, setBuildingName] = useState(config.buildingName || 'عمارة التقوى');
+  const [buildingName, setBuildingName] = useState(config.buildingName || 'اتحاد الملاك');
   const [adminSecurityCode, setAdminSecurityCode] = useState(config.adminSecurityCode || getAdminSecurityCode() || 'admin123');
   const [showSecurityCode, setShowSecurityCode] = useState(false);
 
@@ -248,7 +248,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       notes: adminNotes.trim() || 'رئيس اتحاد الملاك',
     };
 
-    const updatedBuildingName = buildingName.trim() || 'عمارة التقوى';
+    const updatedBuildingName = buildingName.trim() || 'اتحاد الملاك';
     const updatedSecurityCode = adminSecurityCode.trim() || 'admin123';
 
     // Persist security code to authStore and storage

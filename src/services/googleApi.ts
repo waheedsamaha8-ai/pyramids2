@@ -198,6 +198,30 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
   return response.json();
 }
 
+// Search or create Google Drive Folder for application documents
+export async function getOrCreateDriveFolder(folderName = 'اتحاد الملاك - مستندات ومرفقات النظام'): Promise<string | null> {
+  if (!currentAccessToken || currentAccessToken === 'local-token') return null;
+  try {
+    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(folderName)}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`;
+    const result = await apiFetch(searchUrl);
+    if (result?.files && Array.isArray(result.files) && result.files.length > 0) {
+      return result.files[0].id;
+    }
+    const createUrl = 'https://www.googleapis.com/drive/v3/files';
+    const createResult = await apiFetch(createUrl, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+      }),
+    });
+    return createResult?.id || null;
+  } catch (err) {
+    console.warn('Could not create/find Drive folder:', err);
+    return null;
+  }
+}
+
 // 1. Search for existing spreadsheet or create one
 export async function initializeSpreadsheet(): Promise<string> {
   checkAuth();
@@ -227,6 +251,16 @@ export async function initializeSpreadsheet(): Promise<string> {
     return sId;
   }
   
+  // Retrieve custom building name if configured
+  let buildingName = 'اتحاد الملاك';
+  try {
+    const raw = localStorage.getItem('custom_app_config') || localStorage.getItem('cache_config');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.buildingName) buildingName = parsed.buildingName;
+    }
+  } catch {}
+
   // Check if we have a stored spreadsheet ID from previous sessions
   const storedId = localStorage.getItem('sheets_db_spreadsheet_id');
   if (storedId && storedId !== 'local-resident-spreadsheet') {
@@ -239,23 +273,39 @@ export async function initializeSpreadsheet(): Promise<string> {
     }
   }
 
-  // Search for file named "Pyramids View 1 - Management Database"
-  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='Pyramids View 1 - Management Database' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false&fields=files(id,name)`;
-  const searchResult = await apiFetch(searchUrl);
-  
-  if (searchResult?.files && Array.isArray(searchResult.files) && searchResult.files.length > 0) {
-    const sId = searchResult.files[0].id;
-    spreadsheetId = sId;
-    localStorage.setItem('sheets_db_spreadsheet_id', sId);
-    await fetchSheetMetadata();
-    return sId;
+  // Ensure Google Drive folder exists for the user
+  const driveFolderId = await getOrCreateDriveFolder('اتحاد الملاك - مستندات ومرفقات النظام');
+
+  // Search for spreadsheet under custom building name, general "اتحاد الملاك", or legacy name
+  const dbTitles = [
+    `${buildingName} - قاعدة البيانات`,
+    'اتحاد الملاك - قاعدة البيانات',
+    'Pyramids View 1 - Management Database'
+  ];
+
+  for (const title of dbTitles) {
+    try {
+      const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(title)}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false&fields=files(id,name)`;
+      const searchResult = await apiFetch(searchUrl);
+      
+      if (searchResult?.files && Array.isArray(searchResult.files) && searchResult.files.length > 0) {
+        const sId = searchResult.files[0].id;
+        spreadsheetId = sId;
+        localStorage.setItem('sheets_db_spreadsheet_id', sId);
+        await fetchSheetMetadata();
+        return sId;
+      }
+    } catch (e) {
+      console.warn('Search query error:', e);
+    }
   }
   
   // Create spreadsheet if not found
   const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
+  const newTitle = `${buildingName} - قاعدة البيانات`;
   const body = {
     properties: {
-      title: 'Pyramids View 1 - Management Database',
+      title: newTitle,
     },
     sheets: [
       { properties: { title: 'Config' } },
@@ -292,6 +342,17 @@ export async function initializeSpreadsheet(): Promise<string> {
 
   spreadsheetId = sId;
   localStorage.setItem('sheets_db_spreadsheet_id', sId);
+
+  // If Drive folder was created, move the new spreadsheet into that folder
+  if (driveFolderId && sId) {
+    try {
+      await apiFetch(`https://www.googleapis.com/drive/v3/files/${sId}?addParents=${driveFolderId}&fields=id,parents`, {
+        method: 'PATCH',
+      });
+    } catch (e) {
+      console.warn('Could not add spreadsheet to folder:', e);
+    }
+  }
   
   // Map sheetIds safely
   if (Array.isArray(createResult?.sheets)) {
@@ -423,16 +484,44 @@ async function ensureRequiredSheets() {
 async function seedInitialData() {
   if (!spreadsheetId) return;
   
+  let customBuildingName = 'اتحاد الملاك';
+  let customAdminCode = 'admin123';
+  let customAdmins = 'admin@altaqwa.com';
+  let customAdminProfile: any = {
+    flatNumber: 101,
+    name: 'محمد احمد (رئيس الاتحاد)',
+    phone: '',
+    activityType: 'سكني',
+    ownershipType: 'تمليك',
+    monthlyFee: 400,
+    initialBalance: 0,
+    notes: 'رئيس اتحاد الملاك',
+  };
+
+  try {
+    const raw = localStorage.getItem('custom_app_config') || localStorage.getItem('cache_config');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.buildingName) customBuildingName = parsed.buildingName;
+      if (parsed.adminSecurityCode) customAdminCode = parsed.adminSecurityCode;
+      if (parsed.admins && Array.isArray(parsed.admins)) customAdmins = parsed.admins.join(',');
+      if (parsed.adminResidentProfile) customAdminProfile = { ...customAdminProfile, ...parsed.adminResidentProfile };
+    }
+  } catch {}
+
   const configValues = [
     ['Key', 'Value'],
+    ['buildingName', customBuildingName],
+    ['adminSecurityCode', customAdminCode],
     ['expenseTypes', 'صيانة,كهرباء,مياه,أمن ونظافة,مصاعد,أخرى'],
     ['paymentTypes', 'اشتراك شهري,صيانة طارئة,تحصيلات اخرى'],
     ['activityTypes', 'سكني,سكني مغلق,مفروش,إداري,تجاري'],
-    ['admins', 'admin@altaqwa.com'], // default admin email
+    ['admins', customAdmins],
     ['managers', ''],
     ['accountingStartDate', '2026-01-01'],
     ['defaultMonthlyFee', '400'],
     ['activityDefaultFees', JSON.stringify({ 'سكني': 400, 'سكني مغلق': 200, 'مفروش': 600, 'إداري': 800, 'تجاري': 500 })],
+    ['adminResidentProfile', JSON.stringify(customAdminProfile)],
   ];
 
   const residentValues = [

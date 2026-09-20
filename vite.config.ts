@@ -19,9 +19,9 @@ export default defineConfig(() => {
         includeAssets: ['apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
           id: './',
-          name: 'اتحاد ملاك عمارة التقوى',
-          short_name: 'عمارة التقوى',
-          description: 'نظام ذكي متكامل لإدارة شؤون وماليات اتحاد ملاك عمارة التقوى.',
+          name: 'اتحاد الملاك',
+          short_name: 'اتحاد الملاك',
+          description: 'نظام ذكي متكامل لإدارة شؤون وماليات اتحاد الملاك.',
           theme_color: '#1e3a8a',
           background_color: '#f8fafc',
           display: 'standalone',

@@ -6,6 +6,7 @@ export interface StoredAdmin {
   phone: string;
   email: string;
   password: string;
+  buildingName?: string;
   role: 'ADMIN';
   createdAt: string;
 }
@@ -34,6 +35,7 @@ const DEFAULT_MASTER_ADMIN: StoredAdmin = {
   password: 'admin123',
   name: 'محمد احمد (رئيس الاتحاد)',
   phone: '01000000000',
+  buildingName: 'اتحاد الملاك',
   role: 'ADMIN',
   createdAt: '2026-01-01T00:00:00.000Z',
 };
@@ -147,7 +149,8 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
       role: 'ADMIN',
       email: adminMatch.email,
       name: adminMatch.name || 'محمد احمد (رئيس الاتحاد)',
-    };
+      buildingName: adminMatch.buildingName || 'اتحاد الملاك',
+    } as any;
   }
 
   // Check Assistant Config from local storage cache + Default assistant credentials
@@ -266,7 +269,8 @@ export async function registerAdmin(payload: {
   email: string;
   password: string;
   securityKey: string;
-}): Promise<{ success: boolean; email: string; name: string }> {
+  buildingName?: string;
+}): Promise<{ success: boolean; email: string; name: string; buildingName?: string }> {
   const currentSecurityCode = getAdminSecurityCode();
   const validKeys = [currentSecurityCode, 'admin123', 'PYRAMIDS-ADMIN-2026', 'pyramids123', '123456'];
   if (!validKeys.includes(payload.securityKey.trim())) {
@@ -288,6 +292,7 @@ export async function registerAdmin(payload: {
       existing.name = payload.name;
       existing.phone = payload.phone;
       existing.password = payload.password;
+      if (payload.buildingName) existing.buildingName = payload.buildingName;
     } else {
       admins.push({
         id: `admin_${Date.now()}`,
@@ -295,6 +300,7 @@ export async function registerAdmin(payload: {
         phone: payload.phone,
         email: payload.email.toLowerCase().trim(),
         password: payload.password,
+        buildingName: payload.buildingName || 'اتحاد الملاك',
         role: 'ADMIN',
         createdAt: new Date().toISOString(),
       });
@@ -310,6 +316,7 @@ export async function registerAdmin(payload: {
     existing.name = payload.name;
     existing.phone = payload.phone;
     existing.password = payload.password;
+    if (payload.buildingName) existing.buildingName = payload.buildingName;
   } else {
     admins.push({
       id: `admin_${Date.now()}`,
@@ -317,6 +324,7 @@ export async function registerAdmin(payload: {
       phone: payload.phone,
       email: payload.email.toLowerCase().trim(),
       password: payload.password,
+      buildingName: payload.buildingName || 'اتحاد الملاك',
       role: 'ADMIN',
       createdAt: new Date().toISOString(),
     });
@@ -327,6 +335,7 @@ export async function registerAdmin(payload: {
     success: true,
     email: payload.email.toLowerCase().trim(),
     name: payload.name,
+    buildingName: payload.buildingName || 'اتحاد الملاك',
   };
 }
 

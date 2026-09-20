@@ -86,41 +86,70 @@ import { calculateResidentFinancials } from './utils/financialCalculations';
 import { removeUnitFromBuildingLayout, addUnitToBuildingLayout, compareFlatNumbers, isSameFlatNumber, parseFlatNumber, getUnitNumbersForFloor, deriveFloorConfigsFromResidents } from './utils/buildingStructure';
 
 export default function App() {
-  // Auth state
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [role, setRole] = useState<UserRole>('RESIDENT');
-  const [flatNumber, setFlatNumber] = useState<number | string | undefined>(undefined);
+  // Auth state - initialized synchronously to eliminate any page refresh flicker
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('custom_user_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState<string | null>(() => {
+    return localStorage.getItem('google_access_token') || (localStorage.getItem('custom_user_session') ? 'local-token' : null);
+  });
+  const [role, setRole] = useState<UserRole>(() => {
+    try {
+      const saved = localStorage.getItem('custom_user_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.role) return parsed.role;
+      }
+    } catch {}
+    return 'RESIDENT';
+  });
+  const [flatNumber, setFlatNumber] = useState<number | string | undefined>(() => {
+    const f = localStorage.getItem('resident_flat_number');
+    return f ? f : undefined;
+  });
   const [isInitializingAuth, setIsInitializingAuth] = useState(true);
 
   // App configurations & lists
-  const [config, setConfig] = useState<AppConfig>({
-    buildingName: 'عمارة التقوى',
-    expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
-    paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
-    activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري', 'بدون تشطيب'],
-    admins: [],
-    managers: [],
-    accountingStartDate: '2026-01-01',
-    defaultMonthlyFee: 400,
-    activityDefaultFees: {
-      'سكني': 400,
-      'سكني مغلق': 200,
-      'مفروش': 600,
-      'إداري': 800,
-      'تجاري': 500,
-      'بدون تشطيب': 0,
-    },
-    adminResidentProfile: {
-      flatNumber: 207,
-      name: 'محمد احمد (رئيس الاتحاد)',
-      phone: '',
-      activityType: 'سكني',
-      ownershipType: 'تمليك',
-      monthlyFee: 400,
-      initialBalance: 0,
-      notes: 'رئيس اتحاد الملاك',
-    }
+  const [config, setConfig] = useState<AppConfig>(() => {
+    try {
+      const customConf = localStorage.getItem('custom_app_config');
+      if (customConf) return JSON.parse(customConf);
+      const cached = localStorage.getItem('cache_config');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return {
+      buildingName: 'اتحاد الملاك',
+      expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
+      paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
+      activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري', 'بدون تشطيب'],
+      admins: [],
+      managers: [],
+      accountingStartDate: '2026-01-01',
+      defaultMonthlyFee: 400,
+      activityDefaultFees: {
+        'سكني': 400,
+        'سكني مغلق': 200,
+        'مفروش': 600,
+        'إداري': 800,
+        'تجاري': 500,
+        'بدون تشطيب': 0,
+      },
+      adminResidentProfile: {
+        flatNumber: 101,
+        name: 'محمد احمد (رئيس الاتحاد)',
+        phone: '',
+        activityType: 'سكني',
+        ownershipType: 'تمليك',
+        monthlyFee: 400,
+        initialBalance: 0,
+        notes: 'رئيس اتحاد الملاك',
+      }
+    };
   });
   const [rules, setRules] = useState<string[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
@@ -697,6 +726,18 @@ export default function App() {
       
       // Load configurations to determine user role
       const appConfig = await googleApi.getAppConfig();
+      // Merge custom_app_config if user has local custom settings from registration/login
+      try {
+        const customLocal = localStorage.getItem('custom_app_config');
+        if (customLocal) {
+          const parsed = JSON.parse(customLocal);
+          if (parsed.buildingName) appConfig.buildingName = parsed.buildingName;
+          if (parsed.adminSecurityCode) appConfig.adminSecurityCode = parsed.adminSecurityCode;
+          if (parsed.adminResidentProfile) {
+            appConfig.adminResidentProfile = { ...appConfig.adminResidentProfile, ...parsed.adminResidentProfile };
+          }
+        }
+      } catch {}
       setConfig(appConfig);
       if (appConfig.buildingLayout && appConfig.buildingLayout.length > 0) {
         setBuildingLayout(appConfig.buildingLayout);
@@ -720,7 +761,7 @@ export default function App() {
         appConfig.admins.some(a => a.toLowerCase().trim() === email)
       ) {
         detectedRole = 'ADMIN';
-        const adminFlat = appConfig.adminResidentProfile?.flatNumber || 207;
+        const adminFlat = appConfig.adminResidentProfile?.flatNumber || 101;
         setFlatNumber(adminFlat);
         localStorage.setItem('resident_flat_number', String(adminFlat));
       } else if (
@@ -2210,10 +2251,7 @@ export default function App() {
     }
   };
 
-  if (!user) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
-
+  // Check initializing state first to prevent login screen flicker during page refresh/bootstrap
   if (isInitializingAuth) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#0b1329] flex flex-col items-center justify-center p-6 text-right" dir="rtl">
@@ -2223,7 +2261,7 @@ export default function App() {
             <Building className="w-6 h-6 text-blue-900 dark:text-blue-400 absolute animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام {config.buildingName || 'عمارة التقوى'}</h2>
+            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام {config.buildingName || 'اتحاد الملاك'}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 leading-relaxed">
               يرجى الانتظار قليلاً بينما نقوم بمزامنة البيانات وتأمين جلسة العمل...
             </p>
@@ -2255,6 +2293,10 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
