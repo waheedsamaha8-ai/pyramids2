@@ -3,12 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>اتحاد ملاك بيراميدز فيو ١</title>
-    <meta name="description" content="نظام إدارة اتحاد ملاك عمارة بيراميدز فيو ١ لإدارة التحصيلات والمصروفات والسكان." />
+    <title>اتحاد الملاك</title>
+    <meta name="description" content="نظام ذكي متكامل لإدارة شؤون وماليات اتحاد الملاك." />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <script type="text/javascript">
       // SPA Fallback redirect for GitHub Pages
-      var pathSegmentsToKeep = 0;
+      // If deployed at root, pathSegmentsToKeep = 0; if deployed in repo subpath like /pyramids2/, pathSegmentsToKeep = 1.
+      var isSubpath = window.location.pathname.split('/').filter(Boolean).length > 0 && !window.location.pathname.endsWith('.html');
+      var pathSegmentsToKeep = (window.location.hostname.endsWith('github.io') && window.location.pathname.split('/').filter(Boolean).length >= 1) ? 1 : 0;
       var l = window.location;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
