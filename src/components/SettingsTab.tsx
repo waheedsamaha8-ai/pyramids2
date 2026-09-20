@@ -1,6 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { AppConfig, UserRole, AdminResidentProfile } from '../types';
-import { Settings, Shield, Plus, Trash2, Check, X, Users, CreditCard, DollarSign, Briefcase, Pencil, BookOpen, Edit3, Calendar, Calculator, CheckCircle2, Moon, Sun, Palette, Sparkles, Home, UserCheck, Phone, BadgeCheck } from 'lucide-react';
+import { 
+  Settings, 
+  Shield, 
+  Plus, 
+  Trash2, 
+  Check, 
+  X, 
+  Users, 
+  CreditCard, 
+  DollarSign, 
+  Briefcase, 
+  Pencil, 
+  BookOpen, 
+  Edit3, 
+  Calendar, 
+  Calculator, 
+  CheckCircle2, 
+  Moon, 
+  Sun, 
+  Palette, 
+  Sparkles, 
+  Home, 
+  UserCheck, 
+  Phone, 
+  BadgeCheck,
+  Building,
+  Key,
+  Eye,
+  EyeOff,
+  Lock
+} from 'lucide-react';
+import { setStoredAdminSecurityCode, getAdminSecurityCode } from '../services/authStore';
 
 interface SettingsTabProps {
   config: AppConfig;
@@ -27,6 +58,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'settings' | 'permissions' | 'types'>('settings');
   const [newRuleInput, setNewRuleInput] = useState('');
+
+  // Building & Security Code state
+  const [buildingName, setBuildingName] = useState(config.buildingName || 'عمارة التقوى');
+  const [adminSecurityCode, setAdminSecurityCode] = useState(config.adminSecurityCode || getAdminSecurityCode() || 'admin123');
+  const [showSecurityCode, setShowSecurityCode] = useState(false);
 
   // Accounting Settings state
   const defaultFeesMap: Record<string, number> = {
@@ -58,6 +94,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const [adminProfileSaved, setAdminProfileSaved] = useState(false);
 
   useEffect(() => {
+    if (config.buildingName) setBuildingName(config.buildingName);
+    if (config.adminSecurityCode) {
+      setAdminSecurityCode(config.adminSecurityCode);
+    } else {
+      setAdminSecurityCode(getAdminSecurityCode());
+    }
     if (config.accountingStartDate) setAccountingStartDate(config.accountingStartDate);
     if (config.defaultMonthlyFee) setDefaultMonthlyFee(config.defaultMonthlyFee);
     if (config.activityDefaultFees) {
@@ -206,10 +248,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       notes: adminNotes.trim() || 'رئيس اتحاد الملاك',
     };
 
+    const updatedBuildingName = buildingName.trim() || 'عمارة التقوى';
+    const updatedSecurityCode = adminSecurityCode.trim() || 'admin123';
+
+    // Persist security code to authStore and storage
+    setStoredAdminSecurityCode(updatedSecurityCode);
+
     const updated: AppConfig = {
       ...config,
+      buildingName: updatedBuildingName,
+      adminSecurityCode: updatedSecurityCode,
       adminResidentProfile: profile,
     };
+
+    try {
+      localStorage.setItem('custom_app_config', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
     onSaveConfig(updated);
     setAdminProfileSaved(true);
     setTimeout(() => setAdminProfileSaved(false), 3500);
@@ -350,7 +407,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {activeSubTab === 'settings' && (
         <div className="space-y-3.5 text-right">
 
-          {/* Card 1: Union President Resident Details */}
+          {/* Card 1: Union President & Building Details */}
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
               <div className="text-right">
@@ -358,179 +415,242 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center">
                     <UserCheck className="w-4 h-4" />
                   </span>
-                  <h3 className="text-sm font-black text-slate-900">بيانات رئيس الاتحاد (كساكن في المبنى)</h3>
+                  <h3 className="text-sm font-black text-slate-900">بيانات رئيس الاتحاد وهوية العقار</h3>
                   <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-full text-[10px] font-black">
                     رئيس اتحاد الملاك
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 font-bold mt-1 leading-relaxed">
-                  رئيس الاتحاد يعتبر ساكناً أساسياً في المبنى؛ يتم حفظ هذه البيانات وتضمينها تلقائياً كبيانات ساكن عند إنشاء وتوليد هيكل السكان والوحدات.
+                  تعديل اسم العمارة المعروض في التطبيق، ورمز الأمان الإداري للرئاسة، وبيانات رئيس الاتحاد كساكن في المبنى.
                 </p>
               </div>
 
               {adminProfileSaved && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black animate-fade-in self-start sm:self-auto">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>تم حفظ وتحديث بيانات رئيس الاتحاد!</span>
+                  <span>تم حفظ وتحديث بيانات العقار ورئيس الاتحاد!</span>
                 </div>
               )}
             </div>
 
             <form onSubmit={handleSaveAdminProfile} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* 1. Flat Number */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Home className="w-3.5 h-3.5 text-blue-900" />
-                    <span>رقم وحدة / شقة رئيس الاتحاد:</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={adminFlatNumber}
-                    onChange={(e) => setAdminFlatNumber(Number(e.target.value) || 207)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: 207"
-                    required
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">رقم الشقة الخاصة برئيس الاتحاد</p>
-                </div>
-
-                {/* 2. Resident Name */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-blue-900" />
-                    <span>اسم رئيس الاتحاد (الساكن):</span>
+              {/* Row 1: Building Name & Admin Security Code */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-slate-100">
+                {/* 1. Building Name */}
+                <div className="space-y-1.5 bg-blue-50/60 p-3 rounded-xl border border-blue-200/70">
+                  <label className="block text-xs font-black text-blue-950 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-blue-900" />
+                      <span>اسم العمارة / العقار:</span>
+                    </span>
+                    <span className="text-[10px] text-blue-700 font-bold bg-blue-100/70 px-2 py-0.5 rounded-full">يظهر في كامل التطبيق</span>
                   </label>
                   <input
                     type="text"
-                    value={adminResidentName}
-                    onChange={(e) => setAdminResidentName(e.target.value)}
+                    value={buildingName}
+                    onChange={(e) => setBuildingName(e.target.value)}
                     disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: محمد احمد"
+                    className="w-full px-3 py-2 bg-white border border-blue-200 focus:border-blue-600 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                    placeholder="مثال: عمارة التقوى"
                     required
                   />
-                  <p className="text-[10px] text-slate-400 font-bold">الاسم الذي يظهر في كشوف السكان</p>
+                  <p className="text-[10px] text-slate-500 font-bold">اسم العقار المعروض في الترويسات والتقارير وسندات القبض.</p>
                 </div>
 
-                {/* 3. Phone */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-blue-900" />
-                    <span>رقم الهاتف / التواصل:</span>
+                {/* 2. Admin Security Code */}
+                <div className="space-y-1.5 bg-amber-50/60 p-3 rounded-xl border border-amber-200/70">
+                  <label className="block text-xs font-black text-amber-950 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-amber-600" />
+                      <span>رمز الأمان الإداري الخاص برئيس الاتحاد:</span>
+                    </span>
+                    <span className="text-[10px] text-amber-700 font-bold bg-amber-100/70 px-2 py-0.5 rounded-full">سري للرئاسة</span>
                   </label>
-                  <input
-                    type="tel"
-                    value={adminResidentPhone}
-                    onChange={(e) => setAdminResidentPhone(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: 01012345678"
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">للتواصل وسندات القبض</p>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showSecurityCode ? 'text' : 'password'}
+                      value={adminSecurityCode}
+                      onChange={(e) => setAdminSecurityCode(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-amber-200 focus:border-amber-600 rounded-xl text-xs font-mono font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-left"
+                      placeholder="admin123"
+                      dir="ltr"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSecurityCode(!showSecurityCode)}
+                      className="absolute left-2 text-slate-400 hover:text-slate-700 transition cursor-pointer p-1"
+                      title={showSecurityCode ? 'إخفاء الرمز' : 'إظهار الرمز'}
+                    >
+                      {showSecurityCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-bold">الرمز السري المعتمد لتوثيق وتفعيل حساب رئيس الاتحاد في شاشة التسجيل.</p>
                 </div>
+              </div>
 
-                {/* 4. Activity Type */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-blue-900" />
-                    <span>نوع نشاط الوحدة:</span>
-                  </label>
-                  <select
-                    value={adminActivityType}
-                    onChange={(e) => {
-                      const newType = e.target.value;
-                      setAdminActivityType(newType);
-                      const defaultFee = activityFees[newType] ?? defaultFeesMap[newType] ?? 400;
-                      setAdminMonthlyFee(defaultFee);
-                    }}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right cursor-pointer"
-                  >
-                    {config.activityTypes.map(act => (
-                      <option key={act} value={act}>{act}</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-slate-400 font-bold">تصنيف نشاط شقة رئيس الاتحاد</p>
-                </div>
-
-                {/* 5. Ownership Type */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-blue-900" />
-                    <span>نوع الملكية:</span>
-                  </label>
-                  <select
-                    value={adminOwnershipType}
-                    onChange={(e) => setAdminOwnershipType(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right cursor-pointer"
-                  >
-                    <option value="تمليك">تمليك (مالك)</option>
-                    <option value="إيجار">إيجار (مستأجر)</option>
-                  </select>
-                  <p className="text-[10px] text-slate-400 font-bold">صفة ملكية الوحدة</p>
-                </div>
-
-                {/* 6. Monthly Fee */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>الاشتراك الشهري للشقة:</span>
-                  </label>
-                  <div className="flex items-center gap-2">
+              {/* Row 2: Resident Profile Details */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-blue-900" />
+                  <span>بيانات رئيس الاتحاد كساكن في المبنى (تظهر في كشوف السكان والوحدات):</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* 1. Flat Number */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Home className="w-3.5 h-3.5 text-blue-900" />
+                      <span>رقم وحدة / شقة رئيس الاتحاد:</span>
+                    </label>
                     <input
                       type="number"
-                      min="0"
-                      step="10"
-                      value={adminMonthlyFee}
-                      onChange={(e) => setAdminMonthlyFee(Number(e.target.value) || 0)}
+                      min="1"
+                      value={adminFlatNumber}
+                      onChange={(e) => setAdminFlatNumber(Number(e.target.value) || 207)}
                       disabled={!isAdmin}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                      placeholder="400"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                      placeholder="مثال: 207"
+                      required
                     />
-                    <span className="text-xs font-bold text-slate-500 shrink-0">ج.م/شهر</span>
+                    <p className="text-[10px] text-slate-400 font-bold">رقم الشقة الخاصة برئيس الاتحاد</p>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold">قيمة الاشتراك المحسوبة شهرياً</p>
-                </div>
 
-                {/* 7. Initial Balance */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-blue-900" />
-                    <span>الرصيد الافتتاحي (السابق):</span>
-                  </label>
-                  <div className="flex items-center gap-2">
+                  {/* 2. Resident Name */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-blue-900" />
+                      <span>اسم رئيس الاتحاد (الساكن):</span>
+                    </label>
                     <input
-                      type="number"
-                      value={adminInitialBalance}
-                      onChange={(e) => setAdminInitialBalance(Number(e.target.value) || 0)}
+                      type="text"
+                      value={adminResidentName}
+                      onChange={(e) => setAdminResidentName(e.target.value)}
                       disabled={!isAdmin}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                      placeholder="0"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                      placeholder="مثال: محمد احمد"
+                      required
                     />
-                    <span className="text-xs font-bold text-slate-500 shrink-0">ج.م</span>
+                    <p className="text-[10px] text-slate-400 font-bold">الاسم الذي يظهر في كشوف السكان</p>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold">موجب = دائن | سالب = مديونية</p>
-                </div>
 
-                {/* 8. Notes */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <BadgeCheck className="w-3.5 h-3.5 text-amber-600" />
-                    <span>الصفة / الملاحظات:</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="رئيس اتحاد الملاك"
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">الملاحظات المسجلة في الكشف</p>
+                  {/* 3. Phone */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-blue-900" />
+                      <span>رقم الهاتف / التواصل:</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={adminResidentPhone}
+                      onChange={(e) => setAdminResidentPhone(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                      placeholder="مثال: 01012345678"
+                    />
+                    <p className="text-[10px] text-slate-400 font-bold">للتواصل وسندات القبض</p>
+                  </div>
+
+                  {/* 4. Activity Type */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-blue-900" />
+                      <span>نوع نشاط الوحدة:</span>
+                    </label>
+                    <select
+                      value={adminActivityType}
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        setAdminActivityType(newType);
+                        const defaultFee = activityFees[newType] ?? defaultFeesMap[newType] ?? 400;
+                        setAdminMonthlyFee(defaultFee);
+                      }}
+                      disabled={!isAdmin}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right cursor-pointer"
+                    >
+                      {config.activityTypes.map(act => (
+                        <option key={act} value={act}>{act}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 font-bold">تصنيف نشاط شقة رئيس الاتحاد</p>
+                  </div>
+
+                  {/* 5. Ownership Type */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-blue-900" />
+                      <span>نوع الملكية:</span>
+                    </label>
+                    <select
+                      value={adminOwnershipType}
+                      onChange={(e) => setAdminOwnershipType(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right cursor-pointer"
+                    >
+                      <option value="تمليك">تمليك (مالك)</option>
+                      <option value="إيجار">إيجار (مستأجر)</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400 font-bold">صفة ملكية الوحدة</p>
+                  </div>
+
+                  {/* 6. Monthly Fee */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>الاشتراك الشهري للشقة:</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="10"
+                        value={adminMonthlyFee}
+                        onChange={(e) => setAdminMonthlyFee(Number(e.target.value) || 0)}
+                        disabled={!isAdmin}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                        placeholder="400"
+                      />
+                      <span className="text-xs font-bold text-slate-500 shrink-0">ج.م/شهر</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-bold">قيمة الاشتراك المحسوبة شهرياً</p>
+                  </div>
+
+                  {/* 7. Initial Balance */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-blue-900" />
+                      <span>الرصيد الافتتاحي (السابق):</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={adminInitialBalance}
+                        onChange={(e) => setAdminInitialBalance(Number(e.target.value) || 0)}
+                        disabled={!isAdmin}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                        placeholder="0"
+                      />
+                      <span className="text-xs font-bold text-slate-500 shrink-0">ج.م</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-bold">موجب = دائن | سالب = مديونية</p>
+                  </div>
+
+                  {/* 8. Notes */}
+                  <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                    <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <BadgeCheck className="w-3.5 h-3.5 text-amber-600" />
+                      <span>الصفة / الملاحظات:</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={adminNotes}
+                      onChange={(e) => setAdminNotes(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
+                      placeholder="رئيس اتحاد الملاك"
+                    />
+                    <p className="text-[10px] text-slate-400 font-bold">الملاحظات المسجلة في الكشف</p>
+                  </div>
                 </div>
               </div>
 
@@ -541,7 +661,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                     className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-xs hover:shadow transition flex items-center gap-2 cursor-pointer active:scale-98"
                   >
                     <Check className="w-4 h-4" />
-                    <span>حفظ وتثبيت بيانات رئيس الاتحاد كساكن</span>
+                    <span>حفظ وتثبيت اسم العمارة ورمز الأمان وبيانات رئيس الاتحاد</span>
                   </button>
                 </div>
               )}

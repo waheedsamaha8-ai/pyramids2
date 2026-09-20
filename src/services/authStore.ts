@@ -222,6 +222,42 @@ export async function loginWithEmail(emailInput: string, passwordInput: string):
 }
 
 /**
+ * Retrieve current dynamic admin security code.
+ */
+export function getAdminSecurityCode(): string {
+  try {
+    const customCode = localStorage.getItem('admin_security_code');
+    if (customCode && customCode.trim()) return customCode.trim();
+    const rawConfig = localStorage.getItem('custom_app_config');
+    if (rawConfig) {
+      const parsed = JSON.parse(rawConfig);
+      if (parsed.adminSecurityCode && parsed.adminSecurityCode.trim()) {
+        return parsed.adminSecurityCode.trim();
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return 'admin123';
+}
+
+/**
+ * Update dynamic admin security code.
+ */
+export function setStoredAdminSecurityCode(newCode: string): void {
+  const code = (newCode || 'admin123').trim();
+  try {
+    localStorage.setItem('admin_security_code', code);
+    const rawConfig = localStorage.getItem('custom_app_config');
+    const parsed = rawConfig ? JSON.parse(rawConfig) : {};
+    parsed.adminSecurityCode = code;
+    localStorage.setItem('custom_app_config', JSON.stringify(parsed));
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * Register / Update Admin Account.
  */
 export async function registerAdmin(payload: {
@@ -231,9 +267,10 @@ export async function registerAdmin(payload: {
   password: string;
   securityKey: string;
 }): Promise<{ success: boolean; email: string; name: string }> {
-  const validKeys = ['admin123', 'PYRAMIDS-ADMIN-2026', 'pyramids123', '123456'];
+  const currentSecurityCode = getAdminSecurityCode();
+  const validKeys = [currentSecurityCode, 'admin123', 'PYRAMIDS-ADMIN-2026', 'pyramids123', '123456'];
   if (!validKeys.includes(payload.securityKey.trim())) {
-    throw new Error('رمز التحقق الإداري غير صحيح. الرمز المعتمد لرئيس الاتحاد هو: admin123');
+    throw new Error(`رمز التحقق الإداري غير صحيح. الرمز المعتمد لرئيس الاتحاد هو: ${currentSecurityCode}`);
   }
 
   // Try server API first

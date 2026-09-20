@@ -551,6 +551,7 @@ export async function getAppConfig(): Promise<AppConfig> {
 
   const config: AppConfig = {
     buildingName: 'عمارة التقوى',
+    adminSecurityCode: 'admin123',
     expenseTypes: ['صيانة', 'كهرباء', 'مياه', 'أمن ونظافة', 'مصاعد', 'أخرى'],
     paymentTypes: ['اشتراك شهري', 'صيانة طارئة', 'تحصيلات اخرى'],
     activityTypes: ['سكني', 'سكني مغلق', 'مفروش', 'إداري', 'تجاري'],
@@ -579,6 +580,7 @@ export async function getAppConfig(): Promise<AppConfig> {
       if (!Array.isArray(row) || row.length < 2) return;
       const [key, value] = row;
       if (key === 'buildingName' && value) config.buildingName = value.trim();
+      if (key === 'adminSecurityCode' && value) config.adminSecurityCode = value.trim();
       if (key === 'expenseTypes') config.expenseTypes = value.split(',').filter(Boolean);
       if (key === 'paymentTypes') config.paymentTypes = value.split(',').filter(Boolean);
       if (key === 'activityTypes') config.activityTypes = value.split(',').filter(Boolean);
@@ -646,6 +648,7 @@ export async function saveAppConfig(config: AppConfig) {
   const values = [
     ['Key', 'Value'],
     ['buildingName', config.buildingName || 'عمارة التقوى'],
+    ['adminSecurityCode', config.adminSecurityCode || 'admin123'],
     ['expenseTypes', config.expenseTypes.join(',')],
     ['paymentTypes', config.paymentTypes.join(',')],
     ['activityTypes', config.activityTypes.join(',')],

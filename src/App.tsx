@@ -2759,7 +2759,7 @@ export default function App() {
                     <h3 className="text-xs sm:text-sm font-black text-blue-950 leading-tight">
                       إحصائية وتقسيم أنواع وحدات العمارة
                     </h3>
-                    <p className="text-[10px] text-slate-400 font-bold">
+                    <p className="text-[8px] text-slate-400 font-bold">
                       عداد وشريط تفاعلي يتغير تلقائياً حسب النشاط
                     </p>
                   </div>

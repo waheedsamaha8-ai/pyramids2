@@ -5,7 +5,9 @@ import {
   registerAdmin, 
   submitJoinRequest, 
   fetchAllJoinRequests,
-  getLocalAdmins
+  getLocalAdmins,
+  getAdminSecurityCode,
+  setStoredAdminSecurityCode
 } from '../services/authStore';
 import { 
   Mail, 
@@ -50,7 +52,23 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   // President Register inputs
   const [adminName, setAdminName] = useState('محمد احمد');
-  const [buildingNameInput, setBuildingNameInput] = useState('عمارة التقوى');
+  const [buildingNameInput, setBuildingNameInput] = useState(() => {
+    try {
+      const raw = localStorage.getItem('custom_app_config');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.buildingName) return parsed.buildingName;
+      }
+      const rawCached = localStorage.getItem('cache_config');
+      if (rawCached) {
+        const parsed = JSON.parse(rawCached);
+        if (parsed.buildingName) return parsed.buildingName;
+      }
+    } catch {
+      // ignore
+    }
+    return 'عمارة التقوى';
+  });
   const [adminPhone, setAdminPhone] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
@@ -170,14 +188,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         securityKey: adminSecurityKey.trim(),
       });
 
-      // Save buildingName and admin profile to local cache config
+      // Save buildingName, security code, and admin profile to local cache config
       try {
         const raw = localStorage.getItem('custom_app_config');
         const existingConfig = raw ? JSON.parse(raw) : {};
         existingConfig.buildingName = selectedBuildingName;
+        existingConfig.adminSecurityCode = adminSecurityKey.trim();
         if (!existingConfig.adminResidentProfile) existingConfig.adminResidentProfile = {};
         existingConfig.adminResidentProfile.name = selectedAdminName;
         localStorage.setItem('custom_app_config', JSON.stringify(existingConfig));
+        setStoredAdminSecurityCode(adminSecurityKey.trim());
       } catch {
         // ignore
       }
@@ -636,7 +656,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-slate-700 dark:text-slate-300 text-[10px] font-bold text-right">رمز الأمان الإداري الخاص برئيس الاتحاد</label>
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">(الرمز الافتراضي: admin123)</span>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">(الرمز المعتمد: {getAdminSecurityCode()})</span>
                   </div>
                   <div className="relative">
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
@@ -647,7 +667,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       required
                       value={adminSecurityKey}
                       onChange={(e) => setAdminSecurityKey(e.target.value)}
-                      placeholder="admin123"
+                      placeholder={getAdminSecurityCode()}
                       className="w-full pl-4 pr-10 py-2 text-sm bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl focus:border-amber-500 focus:outline-none text-left font-mono font-bold text-amber-900 dark:text-amber-200"
                       dir="ltr"
                     />
