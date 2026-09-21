@@ -64,6 +64,7 @@ import {
 import { initAuth, logoutUser, googleSignIn } from './services/firebaseConfig';
 import * as googleApi from './services/googleApi';
 import * as offlineSync from './services/offlineSync';
+import { fetchAllJoinRequests } from './services/authStore';
 import { UserRole, Resident, Payment, Expense, AppNotification, BuildingRules, AppConfig, MaintenanceRequest, Poll, AdminDecision, BuildingEvent, ChatMessage, PublicComplaint, ComplaintComment, FloorConfig, Craftsman, CraftsmanComment } from './types';
 
 // Importing Custom Components
@@ -620,6 +621,9 @@ export default function App() {
           notes: (r.notes || '').includes('توليد تلقائي') ? '' : (r.notes || '')
         }));
       setResidents(cleaned);
+      syncApprovedRequestsWithResidents(cleaned).then(res => setResidents(res));
+    } else {
+      syncApprovedRequestsWithResidents([]).then(res => setResidents(res));
     }
     if (rawPayments) {
       setPayments(rawPayments.filter(p => p.id !== 'p1'));
@@ -999,6 +1003,46 @@ export default function App() {
     }
   };
 
+  const syncApprovedRequestsWithResidents = async (currentResidents: Resident[]): Promise<Resident[]> => {
+    try {
+      const requests = await fetchAllJoinRequests();
+      const approvedReqs = requests.filter(r => r.status === 'APPROVED');
+      if (approvedReqs.length === 0) return currentResidents;
+
+      let list = [...currentResidents];
+      let changed = false;
+
+      for (const req of approvedReqs) {
+        const found = list.find(r => isSameFlatNumber(r.flatNumber, req.flatNumber));
+        if (!found) {
+          changed = true;
+          const resName = req.residentType === 'OWNER' ? (req.ownerName || 'ساكن جديد') : (req.tenantName || 'ساكن جديد');
+          const resPhone = formatMobileNumber(req.residentType === 'OWNER' ? req.ownerPhone : (req.tenantPhone || ''));
+          list.push({
+            id: `res_req_${req.id}`,
+            flatNumber: req.flatNumber,
+            name: resName,
+            phone: resPhone,
+            activityType: 'سكني',
+            ownershipType: req.residentType === 'OWNER' ? 'تمليك' : 'إيجار',
+            tenantName: req.residentType === 'TENANT' ? req.tenantName : '',
+            tenantPhone: formatMobileNumber(req.tenantPhone || ''),
+            monthlyFee: config?.defaultMonthlyFee || 400,
+            initialBalance: 0,
+            notes: 'تم الانضمام عبر طلب التسجيل الإلكتروني المعتمد',
+          });
+        }
+      }
+
+      if (changed) {
+        offlineSync.saveCachedData('residents', list);
+      }
+      return list;
+    } catch {
+      return currentResidents;
+    }
+  };
+
   const refreshAllData = async () => {
     if (!navigator.onLine) return;
     try {
@@ -1016,7 +1060,9 @@ export default function App() {
         events: loadedEvents,
       } = await googleApi.batchGetAllData();
 
-      setResidents(loadedResidents);
+      const syncedResidents = await syncApprovedRequestsWithResidents(loadedResidents);
+
+      setResidents(syncedResidents);
       setPayments(loadedPayments);
       setExpenses(loadedExpenses);
       setRules(loadedRules);
@@ -1029,7 +1075,7 @@ export default function App() {
       if (loadedEvents) setEvents(loadedEvents);
 
       // Save to offline storage
-      offlineSync.saveCachedData('residents', loadedResidents);
+      offlineSync.saveCachedData('residents', syncedResidents);
       offlineSync.saveCachedData('payments', loadedPayments);
       offlineSync.saveCachedData('expenses', loadedExpenses);
       offlineSync.saveCachedData('rules', { rules: loadedRules });
@@ -2421,8 +2467,8 @@ export default function App() {
 
   // Resolve the resident/tenant object for the current logged in user
   const currentResidentObj = useMemo(() => {
-    // 1. Try finding by active flatNumber state or admin resident profile flat
-    const activeFlat = flatNumber !== undefined && flatNumber !== '' ? flatNumber : config.adminResidentProfile?.flatNumber;
+    // 1. Try finding by active flatNumber state
+    const activeFlat = flatNumber !== undefined && flatNumber !== '' ? flatNumber : (role === 'ADMIN' ? config.adminResidentProfile?.flatNumber : undefined);
     if (activeFlat !== undefined && activeFlat !== '') {
       const found = residents.find(r => isSameFlatNumber(r.flatNumber, activeFlat));
       if (found) return found;
@@ -2458,12 +2504,28 @@ export default function App() {
       if (found) return found;
     }
 
-    // 6. If user is admin/president or in RESIDENT mode, construct a fallback resident from adminResidentProfile
-    if (config.adminResidentProfile) {
+    // 6. If user is in RESIDENT mode, construct a fallback resident using the logged-in resident's details
+    if (role === 'RESIDENT' && user) {
+      const resFlat = (user as any).flatNumber || flatNumber || 101;
+      return {
+        id: `res_user_${resFlat}`,
+        flatNumber: resFlat,
+        name: user.displayName || 'ساكن العمارة',
+        phone: '',
+        activityType: 'سكني',
+        ownershipType: 'تمليك',
+        monthlyFee: config.defaultMonthlyFee || 400,
+        initialBalance: 0,
+        notes: 'ساكن في اتحاد الملاك',
+      } as Resident;
+    }
+
+    // 7. If user is ADMIN, construct fallback resident from adminResidentProfile
+    if (role === 'ADMIN' && config.adminResidentProfile) {
       const p = config.adminResidentProfile;
       return {
-        id: `res_admin_${p.flatNumber || 101}`,
-        flatNumber: p.flatNumber || 101,
+        id: `res_admin_${p.flatNumber || 207}`,
+        flatNumber: p.flatNumber || 207,
         name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
         phone: p.phone || '',
         activityType: p.activityType || 'سكني',
@@ -2475,7 +2537,7 @@ export default function App() {
     }
 
     return undefined;
-  }, [residents, flatNumber, user, config.adminResidentProfile, config.defaultMonthlyFee]);
+  }, [residents, flatNumber, user, role, config.adminResidentProfile, config.defaultMonthlyFee]);
 
   // Keep flatNumber in sync if currentResidentObj was resolved
   useEffect(() => {
