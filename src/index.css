@@ -2,6 +2,14 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Prevent jarring browser pull-to-refresh overscroll tears on mobile devices */
+html,
+body,
+#root {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Light mode background - clean light gray */
 html:not(.dark),
 body:not(.dark) {

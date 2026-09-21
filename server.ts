@@ -109,6 +109,27 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
+  // Config endpoints (for storing assistant credentials and custom settings)
+  app.get('/api/config', async (req, res) => {
+    try {
+      const config = await getConfig();
+      res.json(config || {});
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to read config' });
+    }
+  });
+
+  app.post('/api/config', async (req, res) => {
+    try {
+      const config = req.body;
+      await fs.promises.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+      res.json({ success: true, message: 'Config saved successfully' });
+    } catch (err: any) {
+      console.error('Error saving config in server:', err);
+      res.status(500).json({ error: 'Failed to save config' });
+    }
+  });
+
   // 1. Submit Join Request
   app.post('/api/join-requests', async (req, res) => {
     try {

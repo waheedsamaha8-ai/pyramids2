@@ -142,7 +142,7 @@ export const EventsCalendar: React.FC<EventsCalendarProps> = ({
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
-    <div className="w-full space-y-4 text-right animate-fade-in" id="events-panel" dir="rtl">
+    <div className="w-full space-y-2.5 text-right animate-fade-in" id="events-panel" dir="rtl">
       {/* 1. Unified Community Hub Header */}
       <CommunityHeader
         activeService="calendar"
@@ -153,8 +153,8 @@ export const EventsCalendar: React.FC<EventsCalendarProps> = ({
         }}
         title="تقويم الأحداث وجدول المواعيد"
         description="مواعيد الاجتماعات الدورية، خطط الصيانة، غسيل الخزانات، ومتابعة الفعاليات العامة لعمارة بيراميدز فيو ١."
-        icon={<CalendarIcon className="w-5 h-5" />}
-        badge={`${events.length} فعالية مجدولة`}
+        icon={<CalendarIcon className="w-4 h-4" />}
+        badge={`${events.length} فعالية`}
         counts={communityCounts || {
           events: events.length,
         }}
@@ -163,10 +163,10 @@ export const EventsCalendar: React.FC<EventsCalendarProps> = ({
             <button
               type="button"
               onClick={() => setShowAddForm(!showAddForm)}
-              className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-lg text-xs font-bold transition shadow-2xs flex items-center gap-1 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>{showAddForm ? 'إلغاء النموذج' : 'إضافة حدث للتقويم'}</span>
+              <Plus className="w-3.5 h-3.5" />
+              <span>{showAddForm ? 'إلغاء النموذج' : 'إضافة حدث'}</span>
             </button>
           ) : undefined
         }

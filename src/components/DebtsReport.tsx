@@ -7,6 +7,7 @@ import {
   getCarriedPreviousBalance, 
   exportCarriedBalancesForYear 
 } from '../utils/financialCalculations';
+import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
 import { 
   TrendingDown, 
   Search, 
@@ -410,10 +411,10 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
     residentsWithDebt.forEach((item, index) => {
       const debtAmount = Math.round(Math.abs(item.financials.netBalance));
       text += `${index + 1}. *وحدة ${item.resident.flatNumber}* - المالك: ${item.resident.name}`;
-      if (item.resident.phone) text += ` (${item.resident.phone})`;
+      if (item.resident.phone) text += ` (${formatMobileNumber(item.resident.phone)})`;
       if (item.resident.ownershipType === 'إيجار' && item.resident.tenantName) {
         text += `\n   المستأجر: ${item.resident.tenantName}`;
-        if (item.resident.tenantPhone) text += ` (${item.resident.tenantPhone})`;
+        if (item.resident.tenantPhone) text += ` (${formatMobileNumber(item.resident.tenantPhone)})`;
       }
       text += `\n   • صافي المديونية: *${debtAmount.toLocaleString()} ج.م*`;
       if (item.carriedBalance !== 0) {
@@ -449,20 +450,7 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
     defaultText += `نرجو من سيادتكم التكرم بسرعة سداد المبلغ لتغطية التزامات العمارة والصيانة الدورية ومستحقات الخدمات المشتركة.\nشاكرين ومقدرين حسن تعاونكم دائماً.`;
 
     const encodedText = encodeURIComponent(defaultText);
-    const digitsOnly = phoneToUse.replace(/\D/g, '');
-    let cleanPhone = '';
-    
-    if (digitsOnly) {
-      if (digitsOnly.startsWith('0')) {
-        cleanPhone = '2' + digitsOnly;
-      } else if (digitsOnly.startsWith('20')) {
-        cleanPhone = digitsOnly;
-      } else if (digitsOnly.length === 10 && (digitsOnly.startsWith('10') || digitsOnly.startsWith('11') || digitsOnly.startsWith('12') || digitsOnly.startsWith('15') || digitsOnly.startsWith('1'))) {
-        cleanPhone = '20' + digitsOnly;
-      } else {
-        cleanPhone = digitsOnly;
-      }
-    }
+    const cleanPhone = toWhatsAppNumber(phoneToUse);
     
     if (cleanPhone) {
       window.open(`https://wa.me/${cleanPhone}?text=${encodedText}`, '_blank');
@@ -1166,11 +1154,11 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
                               <div className="flex items-center justify-between text-xs" dir="ltr">
                                 <span className="text-slate-400 text-[10px] font-bold">الهاتف:</span>
                                 <a
-                                  href={`tel:${resident.phone}`}
-                                  className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 font-bold text-[11px]"
+                                  href={`tel:${formatMobileNumber(resident.phone)}`}
+                                  className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 font-bold text-[11px] tracking-wider"
                                 >
                                   <Phone className="w-3 h-3 text-blue-900" />
-                                  <span>{resident.phone}</span>
+                                  <span>{formatMobileNumber(resident.phone)}</span>
                                 </a>
                               </div>
                             )}
@@ -1187,11 +1175,11 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
                                 <div className="flex items-center justify-between" dir="ltr">
                                   <span className="text-amber-800 text-[10px] font-bold">هاتف المستأجر:</span>
                                   <a
-                                    href={`tel:${resident.tenantPhone}`}
-                                    className="inline-flex items-center gap-1 text-amber-900 hover:text-amber-950 font-bold text-[11px]"
+                                    href={`tel:${formatMobileNumber(resident.tenantPhone)}`}
+                                    className="inline-flex items-center gap-1 text-amber-900 hover:text-amber-950 font-bold text-[11px] tracking-wider"
                                   >
                                     <Phone className="w-3 h-3 text-amber-800" />
-                                    <span>{resident.tenantPhone}</span>
+                                    <span>{formatMobileNumber(resident.tenantPhone)}</span>
                                   </a>
                                 </div>
                               )}

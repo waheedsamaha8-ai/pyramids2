@@ -3,6 +3,7 @@ import { generateElementImage } from '../utils/imageExport';
 import { Resident, Payment, AppConfig } from '../types';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
 import { compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
+import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
 import { 
   FileText, 
   CheckCircle2, 
@@ -34,6 +35,7 @@ interface ResidentAccountStatementProps {
   config: AppConfig;
   currentYear: number;
   isResidentOnly?: boolean;
+  onSelectResidentId?: (residentId: string) => void;
   onSelectFlatNumber?: (flatNumber: number | string) => void;
   onPreviewImage: (url: string) => void;
   onOpenResidentsList?: () => void;
@@ -51,33 +53,53 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
   config,
   currentYear,
   isResidentOnly = false,
+  onSelectResidentId,
   onSelectFlatNumber,
   onPreviewImage,
   onOpenResidentsList,
 }) => {
   const [monthFilter, setMonthFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+  const [selectedLocalId, setSelectedLocalId] = useState<string>(resident?.id || '');
+
+  // Keep internal selection synced when parent changes resident prop
+  React.useEffect(() => {
+    if (resident?.id && resident.id !== selectedLocalId) {
+      setSelectedLocalId(resident.id);
+    }
+  }, [resident?.id]);
 
   // When in resident only mode, strictly display the resident's own unit or admin profile
   const activeResident = useMemo(() => {
-    if (resident) return resident;
-    if (isResidentOnly && config?.adminResidentProfile) {
-      const p = config.adminResidentProfile;
-      const foundInList = residents.find(r => isSameFlatNumber(r.flatNumber, p.flatNumber));
-      if (foundInList) return foundInList;
-      return {
-        id: `res_admin_${p.flatNumber || 101}`,
-        flatNumber: p.flatNumber || 101,
-        name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
-        phone: p.phone || '',
-        activityType: p.activityType || 'سكني',
-        ownershipType: p.ownershipType || 'تمليك',
-        monthlyFee: p.monthlyFee !== undefined && p.monthlyFee > 0 ? p.monthlyFee : (config.defaultMonthlyFee || 400),
-        initialBalance: p.initialBalance || 0,
-        notes: p.notes || 'رئيس اتحاد الملاك',
-      } as Resident;
+    if (isResidentOnly) {
+      if (resident) return resident;
+      if (config?.adminResidentProfile) {
+        const p = config.adminResidentProfile;
+        const foundInList = residents.find(r => isSameFlatNumber(r.flatNumber, p.flatNumber));
+        if (foundInList) return foundInList;
+        return {
+          id: `res_admin_${p.flatNumber || 101}`,
+          flatNumber: p.flatNumber || 101,
+          name: p.name || 'وحيد سماحة (رئيس الاتحاد)',
+          phone: p.phone || '',
+          activityType: p.activityType || 'سكني',
+          ownershipType: p.ownershipType || 'تمليك',
+          monthlyFee: p.monthlyFee !== undefined && p.monthlyFee > 0 ? p.monthlyFee : (config.defaultMonthlyFee || 400),
+          initialBalance: p.initialBalance || 0,
+          notes: p.notes || 'رئيس اتحاد الملاك',
+        } as Resident;
+      }
+      return residents.length > 0 ? residents[0] : null;
     }
+
+    // In admin/manager/assistant mode:
+    if (selectedLocalId) {
+      const found = residents.find(r => r.id === selectedLocalId || isSameFlatNumber(r.flatNumber, selectedLocalId));
+      if (found) return found;
+    }
+
+    if (resident) return resident;
     return residents.length > 0 ? residents[0] : null;
-  }, [resident, isResidentOnly, config, residents]);
+  }, [resident, selectedLocalId, isResidentOnly, config, residents]);
 
   const accountingStartDate = config?.accountingStartDate || '2026-01-01';
   const defaultMonthlyFee = config?.defaultMonthlyFee || 400;
@@ -125,7 +147,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
   const unitPayments = useMemo(() => {
     if (!activeResident) return [];
     return payments
-      .filter(p => p.flatNumber === activeResident.flatNumber || (p.residentId && p.residentId === activeResident.id))
+      .filter(p => isSameFlatNumber(p.flatNumber, activeResident.flatNumber) || (p.residentId && p.residentId === activeResident.id))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [activeResident, payments]);
 
@@ -351,7 +373,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
     text += `\nمع تحيات إدارة العمارة 🏢`;
 
     const phoneToUse = target === 'owner' ? (activeResident.phone || '') : (activeResident.tenantPhone || '');
-    const cleanPhone = phoneToUse.replace(/\D/g, '');
+    const cleanPhone = toWhatsAppNumber(phoneToUse);
     const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
@@ -376,7 +398,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
       <div className={`bg-white rounded-3xl ${isResidentOnly ? 'p-2.5 sm:p-5' : 'p-5 sm:p-7'} border border-slate-100 shadow-xl shadow-slate-100/50 space-y-5 sm:space-y-6 w-full`}>
         
         {/* Prominent Unit & Resident Selector for Admin Mode */}
-        {!isResidentOnly && onSelectFlatNumber && (
+        {!isResidentOnly && (
           <div className="bg-slate-50/80 border border-slate-200/60 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-2 text-right">
               <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-950 flex items-center justify-center shrink-0">
@@ -384,19 +406,27 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               </div>
               <div>
                 <span className="text-xs font-black text-slate-800 block">اختر رقم الوحدة واسم الساكن لعرض كشف الحساب:</span>
-                <span className="text-[10px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها</span>
+                <span className="text-[10px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها ومشاركتها</span>
               </div>
             </div>
             
             <div className="w-full sm:w-72">
               <select
-                value={activeResident.flatNumber}
-                onChange={(e) => onSelectFlatNumber?.(e.target.value)}
+                value={activeResident?.id || ''}
+                onChange={(e) => {
+                  const chosenId = e.target.value;
+                  setSelectedLocalId(chosenId);
+                  const found = residents.find(r => r.id === chosenId || isSameFlatNumber(r.flatNumber, chosenId));
+                  if (found) {
+                    onSelectResidentId?.(found.id);
+                    onSelectFlatNumber?.(found.flatNumber);
+                  }
+                }}
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-blue-950 outline-none cursor-pointer hover:border-blue-300 transition shadow-3xs"
               >
                 {residents.slice().sort((a, b) => compareFlatNumbers(a.flatNumber, b.flatNumber)).map(r => (
-                  <option key={r.id} value={r.flatNumber}>
-                    وحدة {r.flatNumber} — {r.name}
+                  <option key={r.id} value={r.id}>
+                    وحدة {r.flatNumber} — {r.name} {r.tenantName ? `(المستأجر: ${r.tenantName})` : ''}
                   </option>
                 ))}
               </select>
@@ -431,40 +461,11 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
             </p>
           </div>
 
-          {/* Unit Selector & Actions Toolbar (Hidden in resident mode) */}
+          {/* Actions Toolbar (Hidden in resident mode) */}
           {!isResidentOnly && (
-            <div className="w-full space-y-3 pt-2">
-              {/* Row 1: Unit Selector & Building Units List Button */}
-              <div className="flex items-center flex-wrap gap-2 w-full">
-                {onSelectFlatNumber && residents.length > 1 && (
-                  <select
-                    value={activeResident.flatNumber}
-                    onChange={(e) => onSelectFlatNumber(e.target.value)}
-                    className="flex-1 sm:flex-initial px-3.5 py-2.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-black text-blue-950 outline-none cursor-pointer hover:bg-slate-100 transition shadow-2xs"
-                    title="التبديل بين شقق ووحدات العمارة"
-                  >
-                    {residents.slice().sort((a, b) => compareFlatNumbers(a.flatNumber, b.flatNumber)).map(r => (
-                      <option key={r.id} value={r.flatNumber}>
-                        وحدة {r.flatNumber} - {r.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {onOpenResidentsList && (
-                  <button
-                    onClick={onOpenResidentsList}
-                    className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                    title="الاطلاع على كشف ودليل هواتف جميع وحدات العمارة"
-                  >
-                    <Building2 className="w-3.5 h-3.5 text-blue-900 shrink-0" />
-                    <span>كشف الوحدات</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Row 2: 3 Equal Width Action Buttons in 1 Row */}
-              <div className={`grid ${activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? 'grid-cols-4' : 'grid-cols-3'} gap-2 w-full pt-2 border-t border-slate-100`}>
+            <div className="w-full pt-2">
+              {/* 3 Equal Width Action Buttons in 1 Row */}
+              <div className={`grid ${activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? 'grid-cols-4' : 'grid-cols-3'} gap-2 w-full`}>
                 {activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? (
                   <>
                     <button
@@ -874,12 +875,16 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
         {/* Section: All Receipts History for this unit (Hidden in resident mode) */}
         {!isResidentOnly && (
           <div className="space-y-3 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-900" />
-                <span>سجل الإيصالات والمدفوعات المسجلة للوحدة ({unitPayments.length})</span>
-              </h3>
-              <span className="text-[10px] text-slate-400 font-bold">كافة التحصيلات المسجلة على النظام</span>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-900" />
+                  <span>سجل المدفوعات للوحدة ({unitPayments.length})</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                  كافة التحصيلات المسجلة
+                </p>
+              </div>
             </div>
 
             {unitPayments.length === 0 ? (
@@ -978,10 +983,10 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               <div><span className="font-bold text-slate-500">رقم الوحدة:</span> <strong className="text-slate-900">شقة / وحدة ({activeResident.flatNumber})</strong></div>
               <div><span className="font-bold text-slate-500">اسم المالك:</span> <strong className="text-slate-900">{activeResident.name}</strong></div>
               <div><span className="font-bold text-slate-500">نوع النشاط:</span> <strong className="text-slate-900">{activeResident.activityType}</strong></div>
-              <div><span className="font-bold text-slate-500">رقم هاتف المالك:</span> <strong className="text-slate-900">{activeResident.phone || '—'}</strong></div>
+              <div><span className="font-bold text-slate-500">رقم هاتف المالك:</span> <strong className="text-slate-900" dir="ltr">{activeResident.phone ? formatMobileNumber(activeResident.phone) : '—'}</strong></div>
               <div><span className="font-bold text-slate-500">نوع الملكية:</span> <strong className="text-slate-900">{activeResident.ownershipType || 'تمليك'}</strong></div>
               {activeResident.tenantName && (
-                <div><span className="font-bold text-slate-500">اسم المستأجر:</span> <strong className="text-slate-900">{activeResident.tenantName} ({activeResident.tenantPhone || '—'})</strong></div>
+                <div><span className="font-bold text-slate-500">اسم المستأجر:</span> <strong className="text-slate-900">{activeResident.tenantName} {activeResident.tenantPhone ? `(${formatMobileNumber(activeResident.tenantPhone)})` : ''}</strong></div>
               )}
             </div>
           </div>
@@ -1054,7 +1059,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
           {/* Payments & Receipts Log Table */}
           {unitPayments.length > 0 && (
             <>
-              <h2 className="font-black text-slate-800 text-xs mb-2">سجل التحصيلات والإيصالات المسجلة للوحدة ({unitPayments.length})</h2>
+              <h2 className="font-black text-slate-800 text-xs mb-2">سجل المدفوعات للوحدة ({unitPayments.length})</h2>
               <table className="w-full text-right border-collapse border border-slate-400 text-xs mb-6">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-400">

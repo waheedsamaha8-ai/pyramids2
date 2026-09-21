@@ -41,7 +41,13 @@ export function parseFlatNumber(flat: number | string | undefined | null): { mai
   if (flat === undefined || flat === null || flat === '') {
     return { main: 999999, sub: 0, original: '' };
   }
-  const str = String(flat).trim();
+  let str = String(flat).trim();
+  const standardDigits: Record<string, string> = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+  };
+  str = str.replace(/[٠-٩۰-۹]/g, (char) => standardDigits[char] || char);
+
   const match = str.match(/^(\d+)(?:[\-\/\_\.](\d+))?$/);
   if (match) {
     const main = parseInt(match[1], 10);
@@ -131,37 +137,36 @@ export function deriveFloorConfigsFromResidents(residents: Resident[]): FloorCon
  * Returns all unit numbers for a floor, respecting explicit unitNumbers or existing residents.
  */
 export function getUnitNumbersForFloor(floor: FloorConfig, allResidents: Resident[] = []): (number | string)[] {
-  // 1. If explicit unit numbers are provided in floor config, use them directly
-  if (Array.isArray(floor.unitNumbers)) {
-    return [...floor.unitNumbers].sort(compareFlatNumbers);
-  }
+  const startParsed = parseFlatNumber(floor.startUnitNumber ?? (floor.unitNumbers?.[0] ?? 101));
+  const floorHundred = startParsed.main >= 100 ? Math.floor(startParsed.main / 100) : null;
 
-  const startParsed = parseFlatNumber(floor.startUnitNumber ?? 101);
+  const baseUnits: (number | string)[] = Array.isArray(floor.unitNumbers) && floor.unitNumbers.length > 0
+    ? [...floor.unitNumbers]
+    : [];
 
-  // 2. If residents exist on this floor, use their actual flat numbers without inventing gaps
-  if (allResidents && allResidents.length > 0) {
-    const residentUnitsInFloorRange = allResidents
-      .map(r => r.flatNumber)
-      .filter(fn => {
-        const fnParsed = parseFlatNumber(fn);
-        if (startParsed.main >= 100) {
-          return Math.floor(fnParsed.main / 100) === Math.floor(startParsed.main / 100);
-        }
-        return fnParsed.main >= startParsed.main && fnParsed.main < startParsed.main + Math.max(floor.unitsCount || 1, 10);
-      });
-
-    if (residentUnitsInFloorRange.length > 0) {
-      return Array.from(new Set(residentUnitsInFloorRange)).sort(compareFlatNumbers);
+  if (baseUnits.length === 0) {
+    const count = floor.unitsCount || 0;
+    for (let i = 0; i < count; i++) {
+      baseUnits.push(startParsed.main + i);
     }
   }
 
-  // 3. Fallback for newly configured empty floors with no residents yet
-  const standardUnits: (number | string)[] = [];
-  const count = floor.unitsCount || 0;
-  for (let i = 0; i < count; i++) {
-    standardUnits.push(startParsed.main + i);
+  // Also include any registered resident flat numbers that belong to this floor
+  if (allResidents && allResidents.length > 0) {
+    allResidents.forEach(r => {
+      if (r.flatNumber === undefined || r.flatNumber === null || String(r.flatNumber).trim() === '') return;
+      const fnParsed = parseFlatNumber(r.flatNumber);
+      const matchesFloor = floorHundred !== null
+        ? Math.floor(fnParsed.main / 100) === floorHundred
+        : (fnParsed.main >= startParsed.main && fnParsed.main < startParsed.main + Math.max(floor.unitsCount || 1, 10));
+
+      if (matchesFloor && !baseUnits.some(u => isSameFlatNumber(u, r.flatNumber))) {
+        baseUnits.push(r.flatNumber);
+      }
+    });
   }
-  return standardUnits;
+
+  return Array.from(new Set(baseUnits)).sort(compareFlatNumbers);
 }
 
 /**

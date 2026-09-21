@@ -84,6 +84,7 @@ import { DebtsReport } from './components/DebtsReport';
 import { ResidentAccountStatement } from './components/ResidentAccountStatement';
 import { calculateResidentFinancials } from './utils/financialCalculations';
 import { removeUnitFromBuildingLayout, addUnitToBuildingLayout, compareFlatNumbers, isSameFlatNumber, parseFlatNumber, getUnitNumbersForFloor, deriveFloorConfigsFromResidents } from './utils/buildingStructure';
+import { formatMobileNumber } from './utils/phoneUtils';
 
 // Synchronous session and state hydration helpers for instant refresh
 const getInitialSavedSession = (): User | null => {
@@ -1048,7 +1049,7 @@ export default function App() {
       addNotification('غير مسموح', 'لا يمتلك الساكن صلاحية إضافة سكان جدد.', 'warning');
       return;
     }
-    const updatedResidents = [...residents.filter(r => r.id !== resident.id && r.flatNumber !== resident.flatNumber), resident];
+    const updatedResidents = [...residents.filter(r => r.id !== resident.id && !isSameFlatNumber(r.flatNumber, resident.flatNumber)), resident];
     setResidents(updatedResidents);
     offlineSync.saveCachedData('residents', updatedResidents);
 
@@ -1118,11 +1119,11 @@ export default function App() {
     const oldFlatNumber = existing ? existing.flatNumber : resident.flatNumber;
 
     // Immediately persist in local state and offline cache
-    const updatedResidents = residents.map((r) => (r.id === resident.id || r.flatNumber === resident.flatNumber) ? resident : r);
+    const updatedResidents = residents.map((r) => (r.id === resident.id || isSameFlatNumber(r.flatNumber, resident.flatNumber)) ? resident : r);
     setResidents(updatedResidents);
     offlineSync.saveCachedData('residents', updatedResidents);
 
-    if (oldFlatNumber !== resident.flatNumber) {
+    if (!isSameFlatNumber(oldFlatNumber, resident.flatNumber)) {
       let updatedLayout = removeUnitFromBuildingLayout(buildingLayout, oldFlatNumber, updatedResidents);
       updatedLayout = addUnitToBuildingLayout(updatedLayout, resident.flatNumber, resident.activityType, updatedResidents);
       setBuildingLayout(updatedLayout);
@@ -1191,24 +1192,29 @@ export default function App() {
   };
 
   const addPayment = (payment: Payment, base64Image?: string) => {
-    const payload = { ...payment, base64Image };
-    const localPayment = {
+    const resolvedBase64 = base64Image || (payment.fileId?.startsWith('data:') ? payment.fileId : undefined);
+    const cleanPayment: Payment = {
       ...payment,
-      fileUrl: base64Image || payment.fileUrl
+      fileId: payment.fileId?.startsWith('data:') ? '' : (payment.fileId || '')
+    };
+    const payload = { ...cleanPayment, base64Image: resolvedBase64 };
+    const localPayment = {
+      ...cleanPayment,
+      fileUrl: resolvedBase64 || cleanPayment.fileUrl
     };
     
     // Immediately persist in local state and offline cache
-    const updatedPayments = [...payments.filter(p => p.id !== payment.id), localPayment];
+    const updatedPayments = [...payments.filter(p => p.id !== cleanPayment.id), localPayment];
     setPayments(updatedPayments);
     offlineSync.saveCachedData('payments', updatedPayments);
 
     if (isOnline) {
       const processUploadAndSave = async () => {
-        let fileId = '';
-        if (base64Image) {
-          fileId = await googleApi.uploadFileToDrive(`Receipt_${payment.receiptNumber || payment.id}`, base64Image);
+        let fileId = cleanPayment.fileId || '';
+        if (resolvedBase64) {
+          fileId = await googleApi.uploadFileToDrive(`Receipt_${cleanPayment.receiptNumber || cleanPayment.id}`, resolvedBase64);
         }
-        await googleApi.addPaymentSheet({ ...payment, fileId });
+        await googleApi.addPaymentSheet({ ...cleanPayment, fileId });
         await refreshAllData();
       };
       processUploadAndSave().catch(err => {
@@ -1222,22 +1228,27 @@ export default function App() {
   };
 
   const editPayment = (payment: Payment, base64Image?: string) => {
-    const payload = { ...payment, base64Image };
-    const localPayment = {
+    const resolvedBase64 = base64Image || (payment.fileId?.startsWith('data:') ? payment.fileId : undefined);
+    const cleanPayment: Payment = {
       ...payment,
-      fileUrl: base64Image || payment.fileUrl
+      fileId: payment.fileId?.startsWith('data:') ? '' : (payment.fileId || '')
     };
-    const updatedPayments = payments.map((p) => p.id === payment.id ? localPayment : p);
+    const payload = { ...cleanPayment, base64Image: resolvedBase64 };
+    const localPayment = {
+      ...cleanPayment,
+      fileUrl: resolvedBase64 || cleanPayment.fileUrl
+    };
+    const updatedPayments = payments.map((p) => p.id === cleanPayment.id ? localPayment : p);
     setPayments(updatedPayments);
     offlineSync.saveCachedData('payments', updatedPayments);
 
     if (isOnline) {
       const processUploadAndSave = async () => {
-        let fileId = payment.fileId || '';
-        if (base64Image) {
-          fileId = await googleApi.uploadFileToDrive(`Receipt_${payment.receiptNumber || payment.id}`, base64Image);
+        let fileId = cleanPayment.fileId || '';
+        if (resolvedBase64) {
+          fileId = await googleApi.uploadFileToDrive(`Receipt_${cleanPayment.receiptNumber || cleanPayment.id}`, resolvedBase64);
         }
-        await googleApi.editPaymentSheet({ ...payment, fileId });
+        await googleApi.editPaymentSheet({ ...cleanPayment, fileId });
         await refreshAllData();
       };
       processUploadAndSave().catch(err => {
@@ -1272,22 +1283,27 @@ export default function App() {
   };
 
   const addExpense = (expense: Expense, base64Image?: string) => {
-    const payload = { ...expense, base64Image };
-    const localExpense = {
+    const resolvedBase64 = base64Image || (expense.fileId?.startsWith('data:') ? expense.fileId : undefined);
+    const cleanExpense: Expense = {
       ...expense,
-      fileUrl: base64Image || expense.fileUrl
+      fileId: expense.fileId?.startsWith('data:') ? '' : (expense.fileId || '')
     };
-    const updatedExpenses = [...expenses.filter(e => e.id !== expense.id), localExpense];
+    const payload = { ...cleanExpense, base64Image: resolvedBase64 };
+    const localExpense = {
+      ...cleanExpense,
+      fileUrl: resolvedBase64 || cleanExpense.fileUrl
+    };
+    const updatedExpenses = [...expenses.filter(e => e.id !== cleanExpense.id), localExpense];
     setExpenses(updatedExpenses);
     offlineSync.saveCachedData('expenses', updatedExpenses);
 
     if (isOnline) {
       const processUploadAndSave = async () => {
-        let fileId = '';
-        if (base64Image) {
-          fileId = await googleApi.uploadFileToDrive(`Invoice_${expense.expenseType}_${expense.id}`, base64Image);
+        let fileId = cleanExpense.fileId || '';
+        if (resolvedBase64) {
+          fileId = await googleApi.uploadFileToDrive(`Invoice_${cleanExpense.expenseType}_${cleanExpense.id}`, resolvedBase64);
         }
-        await googleApi.addExpenseSheet({ ...expense, fileId });
+        await googleApi.addExpenseSheet({ ...cleanExpense, fileId });
         await refreshAllData();
       };
       processUploadAndSave().catch(err => {
@@ -1301,22 +1317,27 @@ export default function App() {
   };
 
   const editExpense = (expense: Expense, base64Image?: string) => {
-    const payload = { ...expense, base64Image };
-    const localExpense = {
+    const resolvedBase64 = base64Image || (expense.fileId?.startsWith('data:') ? expense.fileId : undefined);
+    const cleanExpense: Expense = {
       ...expense,
-      fileUrl: base64Image || expense.fileUrl
+      fileId: expense.fileId?.startsWith('data:') ? '' : (expense.fileId || '')
     };
-    const updatedExpenses = expenses.map((e) => e.id === expense.id ? localExpense : e);
+    const payload = { ...cleanExpense, base64Image: resolvedBase64 };
+    const localExpense = {
+      ...cleanExpense,
+      fileUrl: resolvedBase64 || cleanExpense.fileUrl
+    };
+    const updatedExpenses = expenses.map((e) => e.id === cleanExpense.id ? localExpense : e);
     setExpenses(updatedExpenses);
     offlineSync.saveCachedData('expenses', updatedExpenses);
 
     if (isOnline) {
       const processUploadAndSave = async () => {
-        let fileId = expense.fileId || '';
-        if (base64Image) {
-          fileId = await googleApi.uploadFileToDrive(`Invoice_${expense.expenseType}_${expense.id}`, base64Image);
+        let fileId = cleanExpense.fileId || '';
+        if (resolvedBase64) {
+          fileId = await googleApi.uploadFileToDrive(`Invoice_${cleanExpense.expenseType}_${cleanExpense.id}`, resolvedBase64);
         }
-        await googleApi.editExpenseSheet({ ...expense, fileId });
+        await googleApi.editExpenseSheet({ ...cleanExpense, fileId });
         await refreshAllData();
       };
       processUploadAndSave().catch(err => {
@@ -1901,6 +1922,7 @@ export default function App() {
 
     setConfig(updatedConfig);
     offlineSync.saveCachedData('config', updatedConfig);
+    addNotification('تم حفظ الإعدادات', 'تم حفظ وتحديث إعدادات النظام بنجاح.', 'success');
     
     if (isOnline) {
       googleApi.saveAppConfig(updatedConfig)
@@ -1913,40 +1935,47 @@ export default function App() {
 
   // Chat room and complaints board handlers
   const handleSendChatMessage = (text: string, imageUrl?: string) => {
-    const newMsg: ChatMessage = {
+    const isBase64 = Boolean(imageUrl && imageUrl.startsWith('data:'));
+    const safeMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
       senderName: user ? user.displayName || 'ساكن' : 'ساكن',
       flatNumber,
       text,
-      imageUrl,
+      imageUrl: isBase64 ? undefined : imageUrl,
       timestamp: new Date().toISOString(),
     };
-    const updated = [...messages, newMsg];
+    const localMsg: ChatMessage = {
+      ...safeMsg,
+      imageUrl,
+    };
+    const updated = [...messages, localMsg];
     setMessages(updated);
     offlineSync.saveCachedData('chat_messages', updated);
     addNotification(
       'رسالة دردشة جديدة',
-      `${newMsg.senderName} (وحدة ${flatNumber || '؟'}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`,
+      `${safeMsg.senderName} (وحدة ${flatNumber || '؟'}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`,
       'info',
       'chat'
     );
 
+    const queuedPayload = { ...safeMsg, base64Image: isBase64 ? imageUrl : undefined };
+
     if (isOnline) {
       const processSend = async () => {
         let uploadedUrl = imageUrl;
-        if (imageUrl && imageUrl.startsWith('data:')) {
-          const fileId = await googleApi.uploadFileToDrive(`Chat_${newMsg.id}`, imageUrl);
+        if (isBase64 && imageUrl) {
+          const fileId = await googleApi.uploadFileToDrive(`Chat_${safeMsg.id}`, imageUrl);
           uploadedUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-          newMsg.imageUrl = uploadedUrl;
+          safeMsg.imageUrl = uploadedUrl;
         }
-        await googleApi.addChatMessageSheet(newMsg);
+        await googleApi.addChatMessageSheet(safeMsg);
       };
       processSend().catch(err => {
         logError(err, 'handleSendChatMessage');
-        offlineSync.enqueueAction('ADD_CHAT_MESSAGE', { ...newMsg, base64Image: imageUrl?.startsWith('data:') ? imageUrl : undefined });
+        offlineSync.enqueueAction('ADD_CHAT_MESSAGE', queuedPayload);
       });
     } else {
-      offlineSync.enqueueAction('ADD_CHAT_MESSAGE', { ...newMsg, base64Image: imageUrl?.startsWith('data:') ? imageUrl : undefined });
+      offlineSync.enqueueAction('ADD_CHAT_MESSAGE', queuedPayload);
     }
   };
 
@@ -1955,40 +1984,47 @@ export default function App() {
       ? 'فاعل خير (مجهول)' 
       : (user ? user.displayName || 'ساكن' : 'ساكن');
 
-    const newComplaint: PublicComplaint = {
+    const isBase64 = Boolean(imageUrl && imageUrl.startsWith('data:'));
+    const safeComplaint: PublicComplaint = {
       id: `comp_${Date.now()}`,
       title,
       description,
       flatNumber: isAnonymous ? undefined : flatNumber,
       residentName,
       isAnonymous,
-      imageUrl,
+      imageUrl: isBase64 ? undefined : imageUrl,
       date: new Date().toISOString().split('T')[0],
       comments: [],
     };
-    const updated = [newComplaint, ...complaints];
+    const localComplaint: PublicComplaint = {
+      ...safeComplaint,
+      imageUrl,
+    };
+    const updated = [localComplaint, ...complaints];
     setComplaints(updated);
     offlineSync.saveCachedData('public_complaints', updated);
+
+    const queuedPayload = { ...safeComplaint, base64Image: isBase64 ? imageUrl : undefined };
 
     if (isOnline) {
       const processComplaint = async () => {
         let uploadedUrl = imageUrl;
-        if (imageUrl && imageUrl.startsWith('data:')) {
-          const fileId = await googleApi.uploadFileToDrive(`Complaint_${newComplaint.id}`, imageUrl);
+        if (isBase64 && imageUrl) {
+          const fileId = await googleApi.uploadFileToDrive(`Complaint_${safeComplaint.id}`, imageUrl);
           uploadedUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-          newComplaint.imageUrl = uploadedUrl;
+          safeComplaint.imageUrl = uploadedUrl;
         }
-        await googleApi.addComplaintSheet(newComplaint);
+        await googleApi.addComplaintSheet(safeComplaint);
         await refreshAllData();
       };
       processComplaint().catch(err => {
         logError(err, 'handleAddComplaint');
-        offlineSync.enqueueAction('ADD_COMPLAINT', { ...newComplaint, base64Image: imageUrl?.startsWith('data:') ? imageUrl : undefined });
+        offlineSync.enqueueAction('ADD_COMPLAINT', queuedPayload);
       });
     } else {
-      offlineSync.enqueueAction('ADD_COMPLAINT', { ...newComplaint, base64Image: imageUrl?.startsWith('data:') ? imageUrl : undefined });
+      offlineSync.enqueueAction('ADD_COMPLAINT', queuedPayload);
     }
-    addNotification('شكوى ومقترح جديد', `قام الساكن ${newComplaint.residentName} (وحدة ${flatNumber || '؟'}) بنشر موضوع: "${title}"`, 'warning', 'communication');
+    addNotification('شكوى ومقترح جديد', `قام الساكن ${safeComplaint.residentName} (وحدة ${flatNumber || '؟'}) بنشر موضوع: "${title}"`, 'warning', 'communication');
   };
 
   const handleAddCommentToComplaint = (complaintId: string, text: string) => {
@@ -2404,51 +2440,33 @@ export default function App() {
     }
   };
 
-  if (!user) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
-
+  // Authentication Gate:
+  // 1. If actively checking/initializing auth on cold start, show graceful loading screen (never flash Login)
   if (isInitializingAuth) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0b1329] flex flex-col items-center justify-center p-6 text-right" dir="rtl">
-        <div className="bg-white dark:bg-[#111a2e] p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-xl max-w-md w-full text-center space-y-6">
-          <div className="relative flex items-center justify-center">
-            <div className="w-16 h-16 border-4 border-blue-900 dark:border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-            <Building className="w-6 h-6 text-blue-900 dark:text-blue-400 absolute animate-pulse" />
+      <div className="min-h-screen bg-slate-100 dark:bg-[#0b1329] flex flex-col items-center justify-center p-6 text-right select-none" dir="rtl">
+        <div className="bg-white dark:bg-[#111a2e] p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xl max-w-sm w-full text-center space-y-5 animate-fade-in">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-900 to-indigo-900 dark:from-blue-800 dark:to-indigo-950 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-blue-900/20">
+            <Building2 className="w-8 h-8 animate-pulse" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-blue-950 dark:text-white">جاري تشغيل نظام بيراميدز فيو ١</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-2 leading-relaxed">
-              يرجى الانتظار قليلاً بينما نقوم بمزامنة البيانات وتأمين جلسة العمل...
+            <h2 className="text-base sm:text-lg font-black text-blue-950 dark:text-white">اتحاد ملاك بيراميدز فيو ١</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1.5 leading-relaxed">
+              جاري مزامنة واستعادة جلسة العمل بأمان...
             </p>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/60 text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
-            <span>جاري الاتصال والتحقق من الصلاحيات</span>
-          </div>
-
-          <div className="pt-2 flex flex-col gap-2">
-            <button
-              onClick={() => setIsInitializingAuth(false)}
-              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-            >
-              متابعة الدخول للوحة التحكم فوراً
-            </button>
-            <button
-              onClick={() => {
-                localStorage.removeItem('custom_user_session');
-                setUser(null);
-                setToken(null);
-                setIsInitializingAuth(false);
-              }}
-              className="w-full py-2 px-4 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-semibold"
-            >
-              تسجيل الخروج والعودة لصفحة الدخول
-            </button>
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700 text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center justify-center gap-2">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+            <span>يرجى الانتظار لحظة...</span>
           </div>
         </div>
       </div>
     );
+  }
+
+  // 2. Only show Login when definitely unauthenticated
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
@@ -2594,52 +2612,6 @@ export default function App() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-
-              {/* Mode Switch for Admin */}
-              {(user?.email === 'waheedsamaha8@gmail.com' || (user as any)?.role === 'ADMIN' || config.admins.some(a => a.toLowerCase().trim() === user?.email?.toLowerCase().trim())) && (
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800">وضع المعاينة والتحكم</span>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${role === 'ADMIN' ? 'bg-amber-100 text-amber-900' : 'bg-blue-100 text-blue-900'}`}>
-                      {role === 'ADMIN' ? 'إدارة الملاك' : 'وضع الساكن'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (role === 'ADMIN') {
-                        setRole('RESIDENT');
-                        const targetFlat = config.adminResidentProfile?.flatNumber || 207;
-                        setFlatNumber(targetFlat);
-                        localStorage.setItem('resident_flat_number', String(targetFlat));
-                        const targetName = config.adminResidentProfile?.name || user?.displayName || 'رئيس الاتحاد';
-                        addNotification('تم التبديل لوضع الساكن', `أنت الآن تتصفح التطبيق بصفة الساكن: ${targetName} (شقة ${targetFlat}) للاطلاع والمعاينة.`, 'info');
-                      } else {
-                        setRole('ADMIN');
-                        addNotification('تمت العودة لوضع رئيس الاتحاد', 'تمت استعادة كامل الصلاحيات الإدارية لمجلس إدارة الاتحاد.', 'success');
-                      }
-                      setMenuOpen(false);
-                    }}
-                    className={`w-full py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
-                      role === 'ADMIN'
-                        ? 'bg-amber-100/90 text-amber-900 hover:bg-amber-200 border border-amber-300/80'
-                        : 'bg-blue-900 text-white hover:bg-blue-950 border border-blue-800'
-                    }`}
-                  >
-                    {role === 'ADMIN' ? (
-                      <>
-                        <Users className="w-4 h-4 text-amber-700" />
-                        <span>معاينة التطبيق بصفة ساكن</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-4 h-4 text-amber-400" />
-                        <span>العودة لصفة إدارة الاتحاد</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
 
               {/* Navigation Sections */}
               <div className="flex flex-col gap-2">
@@ -2823,7 +2795,7 @@ export default function App() {
       )}
 
       {/* Main Application Stage */}
-      <main className="flex-1 max-w-full mx-auto w-full px-1 sm:px-1.5 py-3 space-y-3.5" dir="rtl">
+      <main className={`flex-1 max-w-full mx-auto w-full ${activeTab === 'chat' ? 'px-1 sm:px-1.5 py-1 sm:py-1.5 space-y-2' : 'px-1 sm:px-1.5 py-3 space-y-3.5'}`} dir="rtl">
         
         {/* PWA install banner for Android / iOS mobile */}
         {!pwaInstalled && (deferredPrompt || isIosDevice) && (
@@ -2989,10 +2961,10 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-xs sm:text-sm font-black text-blue-950 leading-tight">
-                      إحصائية وتقسيم أنواع وحدات العمارة
+                      إحصائيات العمارة
                     </h3>
                     <p className="text-[10px] text-slate-400 font-bold">
-                      عداد وشريط تفاعلي يتغير تلقائياً حسب النشاط
+                      عداد تفاعلي يتغير حسب النشاط
                     </p>
                   </div>
                 </div>
@@ -3339,14 +3311,15 @@ export default function App() {
             ) : (
               <div className="pt-2">
                 <ResidentAccountStatement
-                  resident={residents.find(r => r.id === reportResidentId) || residents[0]}
+                  resident={residents.find(r => r.id === reportResidentId) || residents.find(r => isSameFlatNumber(r.flatNumber, reportResidentId)) || residents[0]}
                   residents={residents}
                   payments={payments}
                   config={config}
                   currentYear={currentYear}
                   isResidentOnly={false}
+                  onSelectResidentId={(id) => setReportResidentId(id)}
                   onSelectFlatNumber={(flatNum) => {
-                    const found = residents.find(r => r.flatNumber === flatNum);
+                    const found = residents.find(r => isSameFlatNumber(r.flatNumber, flatNum) || String(r.flatNumber) === String(flatNum));
                     if (found) setReportResidentId(found.id);
                   }}
                   onPreviewImage={handlePreviewImage}
@@ -3520,6 +3493,7 @@ export default function App() {
                 : (currentResidentObj?.name || user?.displayName || 'ساكن')
             }
             defaultSubTab={chatSubTab}
+            onSubTabChange={setChatSubTab}
             onSendMessage={handleSendChatMessage}
             onAddComplaint={handleAddComplaint}
             onAddComment={handleAddCommentToComplaint}
@@ -3540,6 +3514,7 @@ export default function App() {
             config={config}
             role={role}
             onSaveConfig={handleSaveAppConfig}
+            onNotification={addNotification}
             rules={rules}
             isDarkMode={isDarkMode}
             onToggleTheme={handleToggleTheme}
@@ -3724,8 +3699,8 @@ export default function App() {
 
       {/* Read-Only Building Rules Modal (Opened from Sidebar for All Residents) */}
       {showRulesReadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3" dir="rtl">
-          <div className="w-full max-w-xl bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-xl animate-scale-up text-right">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 overflow-y-auto" dir="rtl">
+          <div className="w-full max-w-xl bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-xl animate-scale-up text-right my-auto">
             <div className="flex items-center justify-between border-b pb-2.5 mb-3">
               <button 
                 onClick={() => setShowRulesReadModal(false)} 
@@ -3751,7 +3726,7 @@ export default function App() {
             </div>
 
             {/* Rules list */}
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-2">
               {rules.length === 0 ? (
                 <div className="text-center py-8 border border-dashed border-slate-100 rounded-xl flex flex-col items-center justify-center gap-1.5">
                   <BookOpen className="w-6 h-6 text-slate-300" />
@@ -3776,8 +3751,8 @@ export default function App() {
 
       {/* Edit Building Rules Modal (Dedicated for Admins/Managers in Settings) */}
       {showRulesEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3" dir="rtl">
-          <div className="w-full max-w-xl bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-xl animate-scale-up text-right">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 overflow-y-auto" dir="rtl">
+          <div className="w-full max-w-xl bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-xl animate-scale-up text-right my-auto">
             <div className="flex items-center justify-between border-b pb-2.5 mb-3">
               <button 
                 onClick={() => setShowRulesEditModal(false)} 
@@ -3819,7 +3794,7 @@ export default function App() {
             )}
 
             {/* List with delete buttons */}
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-2">
               {rules.length === 0 ? (
                 <p className="text-center text-xs text-slate-400 font-bold py-6">لا توجد مواد تعليمات مسجلة حالياً.</p>
               ) : (
@@ -3941,7 +3916,7 @@ export default function App() {
                         </div>
                         <div className="text-xs font-bold text-slate-700 truncate">{r.name}</div>
                         {r.phone && (
-                          <div className="text-[10px] text-slate-400 font-medium dir-ltr text-right">{r.phone}</div>
+                          <div className="text-[10px] text-slate-400 font-medium dir-ltr text-right tracking-wider">{formatMobileNumber(r.phone)}</div>
                         )}
                       </div>
                     ))}
@@ -3973,12 +3948,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-100 py-3 text-center">
-        <p className="text-[11px] text-slate-500 font-extrabold">
-          مع تحيات اتحاد ملاك بيراميدز فيو ١
-        </p>
-      </footer>
+      {/* Footer (Rendered across all pages including complaints & suggestions box; hidden only in live chat room for full-screen messaging) */}
+      {(activeTab !== 'chat' || chatSubTab === 'complaints') && (
+        <footer className="bg-white dark:bg-[#111a2e] border-t border-slate-100 dark:border-slate-800 py-3 text-center mt-auto">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-extrabold">
+            مع تحيات اتحاد ملاك بيراميدز فيو ١
+          </p>
+        </footer>
+      )}
     </div>
   );
 }

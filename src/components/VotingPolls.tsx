@@ -272,7 +272,7 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
   });
 
   return (
-    <div className="w-full space-y-4 text-right animate-fade-in" id="polls-panel" dir="rtl">
+    <div className="w-full space-y-2.5 text-right animate-fade-in" id="polls-panel" dir="rtl">
       {/* 1. Unified Community Hub Header */}
       <CommunityHeader
         activeService={activeTab === 'polls' ? 'polls' : 'decisions'}
@@ -283,8 +283,8 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
             ? 'شارك برأيك في استبيانات ومقترحات عمارة بيراميدز فيو ١ بشفافية وديمقراطية لاتخاذ القرارات المشتركة.'
             : 'القرارات الرسمية المعتمدة الصادرة عن اتحاد الملاك والإدارة لتنظيم شؤون العمارة وحقوق وواجبات السكان.'
         }
-        icon={activeTab === 'polls' ? <Vote className="w-5 h-5" /> : <Scale className="w-5 h-5" />}
-        badge={activeTab === 'polls' ? `${polls.length} استبيان` : `${decisions.length} قرار معتمد`}
+        icon={activeTab === 'polls' ? <Vote className="w-4 h-4" /> : <Scale className="w-4 h-4" />}
+        badge={activeTab === 'polls' ? `${polls.length} استبيان` : `${decisions.length} قرار`}
         counts={communityCounts || {
           polls: polls.length,
           decisions: decisions.length,
@@ -294,9 +294,9 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
             <button
               type="button"
               onClick={() => setShowAddPollForm(!showAddPollForm)}
-              className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-lg text-xs font-bold transition shadow-2xs flex items-center gap-1 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               <span>{showAddPollForm ? 'إلغاء النموذج' : 'طرح استبيان جديد'}</span>
             </button>
           ) : activeTab === 'decisions' && role !== 'RESIDENT' && role !== 'ASSISTANT' && onAddDecision ? (
@@ -310,29 +310,29 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
                   setShowAddDecisionForm(true);
                 }
               }}
-              className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-lg text-xs font-bold transition shadow-2xs flex items-center gap-1 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>{showAddDecisionForm ? 'إلغاء النموذج' : 'إصدار قرار إداري جديد'}</span>
+              <Plus className="w-3.5 h-3.5" />
+              <span>{showAddDecisionForm ? 'إلغاء النموذج' : 'إصدار قرار إداري'}</span>
             </button>
           ) : undefined
         }
       />
 
       {/* 2. Subtabs Switcher (Polls vs Decisions) */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-lg w-fit">
         <button
           type="button"
           onClick={() => setActiveTab('polls')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
             activeTab === 'polls'
-              ? 'bg-blue-900 text-white shadow-xs'
+              ? 'bg-blue-900 text-white shadow-2xs'
               : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
           }`}
         >
-          <Vote className="w-4 h-4" />
+          <Vote className="w-3.5 h-3.5" />
           <span>استبيان وتصويت الملاك</span>
-          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md ${activeTab === 'polls' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeTab === 'polls' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
             {polls.length}
           </span>
         </button>
@@ -340,15 +340,15 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('decisions')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
             activeTab === 'decisions'
-              ? 'bg-blue-900 text-white shadow-xs'
+              ? 'bg-blue-900 text-white shadow-2xs'
               : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
           }`}
         >
-          <Scale className="w-4 h-4" />
+          <Scale className="w-3.5 h-3.5" />
           <span>سجل القرارات واللوائح</span>
-          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md ${activeTab === 'decisions' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeTab === 'decisions' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
             {decisions.length}
           </span>
         </button>

@@ -34,27 +34,27 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
   const getIcon = (type: AppNotification['type'], category?: AppNotification['category']) => {
     if (category === 'chat') {
-      return <MessageSquare className="w-5 h-5 text-blue-600" />;
+      return <MessageSquare className="w-4 h-4 text-blue-600 shrink-0" />;
     }
     if (category === 'registration') {
-      return <UserPlus className="w-5 h-5 text-emerald-600" />;
+      return <UserPlus className="w-4 h-4 text-emerald-600 shrink-0" />;
     }
     if (category === 'services') {
-      return <Wrench className="w-5 h-5 text-amber-600" />;
+      return <Wrench className="w-4 h-4 text-amber-600 shrink-0" />;
     }
     if (category === 'communication') {
-      return <HelpCircle className="w-5 h-5 text-indigo-600" />;
+      return <HelpCircle className="w-4 h-4 text-indigo-600 shrink-0" />;
     }
 
     switch (type) {
       case 'success':
-        return <CheckCircle2 className="w-5 h-5 text-emerald-500" />;
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />;
       case 'warning':
-        return <AlertTriangle className="w-5 h-5 text-amber-500" />;
+        return <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />;
       case 'error':
-        return <X className="w-5 h-5 text-red-500" />;
+        return <X className="w-4 h-4 text-red-500 shrink-0" />;
       default:
-        return <Info className="w-5 h-5 text-blue-500" />;
+        return <Info className="w-4 h-4 text-blue-500 shrink-0" />;
     }
   };
 
@@ -76,13 +76,13 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   const getTypeStyle = (type: AppNotification['type']) => {
     switch (type) {
       case 'success':
-        return 'bg-emerald-50/50 border-emerald-100';
+        return 'bg-emerald-50/60 border-emerald-200/80';
       case 'warning':
-        return 'bg-amber-50/50 border-amber-100';
+        return 'bg-amber-50/60 border-amber-200/80';
       case 'error':
-        return 'bg-red-50/50 border-red-100';
+        return 'bg-red-50/60 border-red-200/80';
       default:
-        return 'bg-blue-50/50 border-blue-100';
+        return 'bg-blue-50/60 border-blue-200/80';
     }
   };
 
@@ -90,22 +90,22 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-xs">
       <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-slide-left text-right">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100">
+        <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-100">
           <div className="flex items-center justify-between">
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition"
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition cursor-pointer"
               title="إغلاق"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
             
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-900">مركز التنبيهات والرسائل</h2>
+              <h2 className="text-sm sm:text-base font-black text-slate-900">مركز التنبيهات والرسائل</h2>
               <div className="relative">
-                <Bell className="w-5 h-5 text-blue-900" />
+                <Bell className="w-4 h-4 text-blue-900" />
                 {allowedNotifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
                     {allowedNotifications.filter(n => !n.read).length}
                   </span>
                 )}
@@ -114,12 +114,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
           </div>
 
           {/* Filter Categories Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pt-4 pb-1 no-scrollbar text-xs">
+          <div className="flex items-center gap-1 overflow-x-auto pt-2 pb-0.5 no-scrollbar text-xs">
             <button
               onClick={() => setActiveCategory('all')}
-              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                 activeCategory === 'all'
-                  ? 'bg-blue-900 text-white shadow-xs'
+                  ? 'bg-blue-900 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -129,9 +129,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               <>
                 <button
                   onClick={() => setActiveCategory('chat')}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                     activeCategory === 'chat'
-                      ? 'bg-blue-900 text-white shadow-xs'
+                      ? 'bg-blue-900 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -139,9 +139,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 </button>
                 <button
                   onClick={() => setActiveCategory('communication')}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                     activeCategory === 'communication'
-                      ? 'bg-blue-900 text-white shadow-xs'
+                      ? 'bg-blue-900 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -151,9 +151,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             )}
             <button
               onClick={() => setActiveCategory('services')}
-              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                 activeCategory === 'services'
-                  ? 'bg-blue-900 text-white shadow-xs'
+                  ? 'bg-blue-900 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -161,9 +161,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             </button>
             <button
               onClick={() => setActiveCategory('registration')}
-              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                 activeCategory === 'registration'
-                  ? 'bg-blue-900 text-white shadow-xs'
+                  ? 'bg-blue-900 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -173,46 +173,48 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
         </div>
 
         {/* Notification List */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-2 sm:px-2.5 py-2 space-y-1.5">
           {displayedNotifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-3">
-              <Bell className="w-12 h-12 stroke-[1.5]" />
-              <p className="text-sm font-semibold">لا توجد تنبيهات أو رسائل جديدة في هذا القسم.</p>
+            <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2">
+              <Bell className="w-8 h-8 stroke-[1.5] text-slate-300" />
+              <p className="text-xs font-bold">لا توجد تنبيهات أو رسائل جديدة في هذا القسم.</p>
             </div>
           ) : (
             displayedNotifications.map((notif) => (
               <div
                 key={notif.id}
-                className={`p-4 border rounded-2xl flex items-start gap-4 transition-all duration-200 ${getTypeStyle(notif.type)}`}
+                className={`px-2.5 py-1.5 border rounded-xl flex items-start gap-2 transition-all duration-150 shadow-2xs ${getTypeStyle(notif.type)}`}
               >
                 {/* Dismiss button */}
                 <button
                   onClick={() => onDismiss(notif.id)}
-                  className="text-slate-300 hover:text-slate-500 rounded-lg p-1 transition"
+                  className="text-slate-400 hover:text-red-500 hover:bg-red-50/80 rounded-md p-1 transition cursor-pointer shrink-0 mt-0.5"
                   title="حذف التنبيه"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
 
                 {/* Message info */}
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white/80 text-slate-600 border border-slate-200/60">
-                      {getCategoryLabel(notif.category)}
-                    </span>
-                    <h4 className="text-sm font-bold text-slate-900">{notif.title}</h4>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[9px] text-slate-500 font-bold">
+                        {new Date(notif.timestamp).toLocaleTimeString('ar-EG', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-white/90 text-slate-600 border border-slate-200/70 shrink-0">
+                        {getCategoryLabel(notif.category)}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 truncate text-right">{notif.title}</h4>
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed pt-1">{notif.message}</p>
-                  <span className="text-[10px] text-slate-400 font-semibold block pt-1">
-                    {new Date(notif.timestamp).toLocaleTimeString('ar-EG', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
+                  <p className="text-[11px] text-slate-700 font-semibold leading-snug mt-0.5 text-right">{notif.message}</p>
                 </div>
 
                 {/* Icon */}
-                <div className="pt-0.5">
+                <div className="pt-0.5 shrink-0">
                   {getIcon(notif.type, notif.category)}
                 </div>
               </div>
@@ -222,12 +224,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
         {/* Footer */}
         {allowedNotifications.length > 0 && (
-          <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-center">
+          <div className="p-2 sm:p-2.5 border-t border-slate-100 bg-slate-50/50 flex justify-center">
             <button
               onClick={onClearAll}
-              className="flex items-center gap-2 text-red-600 hover:text-red-700 text-sm font-bold transition px-4 py-2 rounded-xl hover:bg-red-50"
+              className="flex items-center gap-1.5 text-red-600 hover:text-red-700 text-xs font-bold transition px-3 py-1.5 rounded-lg hover:bg-red-50 cursor-pointer"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
               <span>مسح جميع التنبيهات</span>
             </button>
           </div>

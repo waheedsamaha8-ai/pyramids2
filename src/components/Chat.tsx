@@ -30,6 +30,7 @@ interface ChatProps {
   flatNumber?: number | string;
   userName: string;
   defaultSubTab?: 'room' | 'complaints';
+  onSubTabChange?: (tab: 'room' | 'complaints') => void;
   onSendMessage: (text: string, imageUrl?: string) => void;
   onAddComplaint: (title: string, description: string, isAnonymous?: boolean, imageUrl?: string) => void;
   onAddComment: (complaintId: string, text: string) => void;
@@ -50,6 +51,7 @@ export const Chat: React.FC<ChatProps> = ({
   flatNumber,
   userName,
   defaultSubTab = 'room',
+  onSubTabChange,
   onSendMessage,
   onAddComplaint,
   onAddComment,
@@ -69,6 +71,13 @@ export const Chat: React.FC<ChatProps> = ({
       setActiveSubTab(defaultSubTab);
     }
   }, [defaultSubTab]);
+
+  const handleSelectSubTab = (tab: 'room' | 'complaints') => {
+    setActiveSubTab(tab);
+    if (onSubTabChange) {
+      onSubTabChange(tab);
+    }
+  };
   
   // Chat Room states
   const [messageText, setMessageText] = useState('');
@@ -240,87 +249,89 @@ export const Chat: React.FC<ChatProps> = ({
 
   const handleNavigateService = (srv: CommunityServiceId) => {
     if (srv === 'chat-room') {
-      setActiveSubTab('room');
+      handleSelectSubTab('room');
     } else if (srv === 'chat-complaints') {
-      setActiveSubTab('complaints');
+      handleSelectSubTab('complaints');
     } else if (onNavigateCommunity) {
       onNavigateCommunity(srv);
     }
   };
 
   return (
-    <div className="w-full space-y-4 text-right animate-fade-in" dir="rtl">
-      {/* 1. Unified Community Hub Header */}
-      <CommunityHeader
-        activeService={activeSubTab === 'room' ? 'chat-room' : 'chat-complaints'}
-        onNavigateService={handleNavigateService}
-        title={activeSubTab === 'room' ? 'غرفة دردشة ونقاشات السكان' : 'صندوق الشكاوى والمقترحات'}
-        description={
-          activeSubTab === 'room'
-            ? 'مساحة تفاعلية فورية ومباشرة لتبادل الأحاديث وإرسال الرسائل والصور بين سكان وملاك العمارة.'
-            : 'طرح الشكاوى والمقترحات والتعليقات الإنشائية للمناقشة مع اتحاد الملاك مع إمكانية سرية الهوية.'
-        }
-        icon={activeSubTab === 'room' ? <MessageSquare className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
-        badge={activeSubTab === 'room' ? `${messages.length} رسالة` : `${complaints.length} شكوى ومقترح`}
-        counts={communityCounts || {
-          messages: messages.length,
-          complaints: complaints.length,
-        }}
-        actionButton={
-          activeSubTab === 'complaints' ? (
-            <button
-              type="button"
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{showAddForm ? 'إلغاء النموذج' : 'تقديم شكوى أو مقترح جديد'}</span>
-            </button>
-          ) : undefined
-        }
-      />
-
-      {/* 2. Subtabs Switcher (Chat vs Complaints) */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-xl w-fit">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('room')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+    <div className="w-full space-y-2 text-right animate-fade-in flex flex-col" dir="rtl">
+      {/* 1. Unified Community Hub Header & Subtabs (Sticky Top after Main Fixed Header) */}
+      <div className="sticky top-16 z-20 bg-slate-100/95 dark:bg-[#0b1329]/95 backdrop-blur-md pt-1 pb-2 space-y-2">
+        <CommunityHeader
+          activeService={activeSubTab === 'room' ? 'chat-room' : 'chat-complaints'}
+          onNavigateService={handleNavigateService}
+          title={activeSubTab === 'room' ? 'غرفة دردشة ونقاشات السكان' : 'صندوق الشكاوى والمقترحات'}
+          description={
             activeSubTab === 'room'
-              ? 'bg-blue-900 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>دردشة السكان المباشرة</span>
-          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md ${activeSubTab === 'room' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-            {messages.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('complaints')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
-            activeSubTab === 'complaints'
-              ? 'bg-blue-900 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>صندوق الشكاوى والمقترحات</span>
-          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md ${activeSubTab === 'complaints' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-            {complaints.length}
-          </span>
-        </button>
+              ? 'مساحة تفاعلية فورية ومباشرة لتبادل الأحاديث وإرسال الرسائل والصور بين سكان وملاك العمارة.'
+              : 'طرح الشكاوى والمقترحات والتعليقات الإنشائية للمناقشة مع اتحاد الملاك مع إمكانية سرية الهوية.'
+          }
+          icon={activeSubTab === 'room' ? <MessageSquare className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+          badge={activeSubTab === 'room' ? `${messages.length} رسالة` : `${complaints.length} شكوى`}
+          counts={communityCounts || {
+            messages: messages.length,
+            complaints: complaints.length,
+          }}
+          actionButton={
+            activeSubTab === 'complaints' ? (
+              <button
+                type="button"
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-lg text-xs font-bold transition shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{showAddForm ? 'إلغاء النموذج' : 'تقديم شكوى / مقترح'}</span>
+              </button>
+            ) : undefined
+          }
+        />
+
+        {/* 2. Subtabs Switcher (Chat vs Complaints) */}
+        <div className="flex items-center gap-1 p-0.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-lg w-fit shadow-2xs">
+          <button
+            type="button"
+            onClick={() => handleSelectSubTab('room')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
+              activeSubTab === 'room'
+                ? 'bg-blue-900 text-white shadow-2xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>دردشة السكان المباشرة</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeSubTab === 'room' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+              {messages.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectSubTab('complaints')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
+              activeSubTab === 'complaints'
+                ? 'bg-blue-900 text-white shadow-2xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>صندوق الشكاوى والمقترحات</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeSubTab === 'complaints' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+              {complaints.length}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
       {/* 1. CHAT ROOM SUBTAB */}
       {/* ========================================================================= */}
       {activeSubTab === 'room' && (
-        <div className="bg-white dark:bg-[#111a2e] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col h-[650px]">
+        <div className="bg-white dark:bg-[#111a2e] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col h-[calc(100dvh-190px)] sm:h-[calc(100dvh-200px)] min-h-[480px]">
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
+          <div className="flex-1 overflow-y-auto p-2.5 sm:p-3.5 space-y-2 sm:space-y-2.5 bg-slate-50/50 dark:bg-slate-900/30 overscroll-contain">
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3 py-12">
                 <MessageCircle className="w-14 h-14 stroke-[1.5] text-slate-300 dark:text-slate-600" />
@@ -329,65 +340,46 @@ export const Chat: React.FC<ChatProps> = ({
               </div>
             ) : (
               messages.map((msg) => {
-                const isMe = msg.senderName === userName;
+                const isMe = Boolean(
+                  (msg.senderName && userName && msg.senderName.trim().toLowerCase() === userName.trim().toLowerCase()) ||
+                  (msg.flatNumber && flatNumber && String(msg.flatNumber).trim() === String(flatNumber).trim())
+                );
                 const canModify = isMe || role === 'ADMIN';
                 const isEditing = editingMessageId === msg.id;
 
                 return (
                   <div
                     key={msg.id}
-                    className={`w-full rounded-2xl p-3.5 sm:p-4 border transition text-right space-y-2.5 shadow-2xs ${
+                    className={`w-full rounded-2xl p-2.5 sm:p-3 border transition text-right space-y-1.5 sm:space-y-2 shadow-2xs ${
                       isMe
                         ? 'bg-blue-900 text-white border-blue-800'
                         : 'bg-white dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-slate-800'
                     }`}
                   >
-                    {/* Header with Sender info, unit, timestamp, and edit/delete actions */}
-                    <div className="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-2 flex-wrap gap-2">
-                      <div className="flex items-center gap-2 text-xs font-bold">
-                        <span className={`font-black text-xs ${isMe ? 'text-blue-100' : 'text-slate-900 dark:text-slate-100'}`}>
-                          {msg.senderName}
-                        </span>
-                        {msg.flatNumber && (
-                          <span className={`px-2 py-0.5 rounded-md text-[10.5px] font-black ${
-                            isMe ? 'bg-blue-800/80 text-white' : 'bg-blue-50 dark:bg-blue-900/40 text-blue-900 dark:text-blue-300'
-                          }`}>
-                            وحدة {msg.flatNumber}
-                          </span>
-                        )}
-                        {isMe && (
-                          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 dark:text-emerald-400 rounded-md text-[10px] font-black border border-emerald-400/30">
-                            رسالتك
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] font-bold ${isMe ? 'text-blue-200' : 'text-slate-400 dark:text-slate-500'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-
-                        {/* Actions: Edit & Delete buttons */}
+                    {/* Header with Mini Edit/Delete buttons on the Right, Mini Sender Name & Unit, and Timestamp on the Left */}
+                    <div className="flex items-center justify-between pb-1 flex-wrap gap-1.5 border-b border-black/5 dark:border-white/5">
+                      {/* Right side (Start in RTL): Mini Edit & Delete buttons + Mini Sender Name + Unit Number */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Mini Actions: Edit & Delete buttons on the right */}
                         {canModify && !isEditing && (
-                          <div className="flex items-center gap-1.5 border-r border-slate-200/30 dark:border-slate-700 pr-2.5">
-                            {/* Edit button (for author) */}
-                            {isMe && onEditMessage && (
+                          <div className="flex items-center gap-1 pl-1.5 border-l border-black/10 dark:border-white/10 ml-0.5">
+                            {/* Edit button (beside delete button) */}
+                            {onEditMessage && (
                               <button
                                 type="button"
                                 onClick={() => startEditingMessage(msg.id, msg.text || '')}
-                                className={`px-2 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                                className={`p-1.5 rounded-lg transition cursor-pointer flex items-center justify-center ${
                                   isMe
-                                    ? 'bg-blue-800/80 hover:bg-blue-800 text-white border border-blue-700'
-                                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-blue-600'
+                                    ? 'bg-blue-800/90 hover:bg-blue-700 text-blue-100 hover:text-white border border-blue-600/50 shadow-2xs'
+                                    : 'bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/50 shadow-2xs'
                                 }`}
                                 title="تعديل الرسالة"
                               >
-                                <Edit className="w-3 h-3" />
-                                <span className="text-[10.5px]">تعديل</span>
+                                <Edit className="w-3.5 h-3.5" />
                               </button>
                             )}
 
-                            {/* Delete button (for author or admin) */}
+                            {/* Delete button */}
                             {onDeleteMessage && (
                               <button
                                 type="button"
@@ -398,20 +390,41 @@ export const Chat: React.FC<ChatProps> = ({
                                     () => onDeleteMessage(msg.id)
                                   );
                                 }}
-                                className={`px-2 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                                className={`p-1.5 rounded-lg transition cursor-pointer flex items-center justify-center ${
                                   isMe
-                                    ? 'bg-red-500/20 hover:bg-red-500/40 text-red-100 border border-red-400/30'
-                                    : 'bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-600 border border-red-200'
+                                    ? 'bg-red-500/25 hover:bg-red-500/50 text-red-100 hover:text-white border border-red-400/40 shadow-2xs'
+                                    : 'bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 border border-red-200/80 dark:border-red-900/50 shadow-2xs'
                                 }`}
                                 title="حذف الرسالة"
                               >
-                                <Trash2 className="w-3 h-3" />
-                                <span className="text-[10.5px]">حذف</span>
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
                         )}
+
+                        {/* Mini Name & Unit */}
+                        <span className={`font-black text-[11px] sm:text-xs ${isMe ? 'text-blue-100' : 'text-slate-900 dark:text-slate-100'}`}>
+                          {msg.senderName}
+                        </span>
+                        {msg.flatNumber && (
+                          <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-black ${
+                            isMe ? 'bg-blue-800/80 text-white' : 'bg-blue-50 dark:bg-blue-900/40 text-blue-900 dark:text-blue-300'
+                          }`}>
+                            وحدة {msg.flatNumber}
+                          </span>
+                        )}
+                        {isMe && (
+                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 dark:text-emerald-400 rounded text-[9px] font-black border border-emerald-400/30">
+                            رسالتك
+                          </span>
+                        )}
                       </div>
+
+                      {/* Left side (End in RTL): Compact Timestamp */}
+                      <span className={`text-[9.5px] font-bold ${isMe ? 'text-blue-200/80' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {new Date(msg.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
 
                     {/* Image Attachment inside Card */}
@@ -420,7 +433,7 @@ export const Chat: React.FC<ChatProps> = ({
                         <img
                           src={msg.imageUrl}
                           alt="مرفق صورة"
-                          className="max-h-96 w-full object-cover rounded-xl hover:scale-[1.01] transition duration-300"
+                          className="max-h-80 w-full object-cover rounded-xl hover:scale-[1.01] transition duration-300"
                           onClick={() => onPreviewImage && onPreviewImage(msg.imageUrl!)}
                         />
                         <button
@@ -477,16 +490,16 @@ export const Chat: React.FC<ChatProps> = ({
 
           {/* Attached Image Preview above input */}
           {chatImageFile && (
-            <div className="px-4 py-2 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
                 <img 
                   src={chatImageFile} 
                   alt="معاينة الصورة" 
-                  className="w-12 h-12 object-cover rounded-xl border border-slate-300 shadow-xs" 
+                  className="w-11 h-11 object-cover rounded-xl border border-slate-300 dark:border-slate-600 shadow-2xs" 
                 />
                 <div className="text-right">
-                  <span className="text-xs font-black text-slate-800 block">تم اختيار صورة جاهزة للإرسال</span>
-                  <span className="text-[10px] text-slate-400 font-bold">اضغط إرسال لنشرها في المحادثة</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-200 block leading-tight">تم اختيار صورة جاهزة للإرسال</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold">اضغط إرسال لنشرها في المحادثة</span>
                 </div>
               </div>
               <button
@@ -495,7 +508,7 @@ export const Chat: React.FC<ChatProps> = ({
                   setChatImageFile(null);
                   if (chatFileInputRef.current) chatFileInputRef.current.value = '';
                 }}
-                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                className="p-1.5 text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
                 title="إلغاء الصورة"
               >
                 <X className="w-4 h-4" />
@@ -503,46 +516,48 @@ export const Chat: React.FC<ChatProps> = ({
             </div>
           )}
 
-          {/* Input Area */}
-          <form onSubmit={handleSendChat} className="p-3.5 border-t border-slate-200 bg-white flex items-center gap-2">
-            {/* Hidden File Input */}
-            <input
-              type="file"
-              ref={chatFileInputRef}
-              onChange={handleChatImageSelect}
-              accept="image/*"
-              className="hidden"
-            />
+          {/* Input Area (Sticky / Docked at Bottom) */}
+          <div className="sticky bottom-0 z-10 bg-white dark:bg-[#111a2e] border-t border-slate-200/80 dark:border-slate-800 shrink-0">
+            <form onSubmit={handleSendChat} className="p-2.5 sm:p-3 flex items-center gap-1.5 sm:gap-2">
+              {/* Hidden File Input */}
+              <input
+                type="file"
+                ref={chatFileInputRef}
+                onChange={handleChatImageSelect}
+                accept="image/*"
+                className="hidden"
+              />
 
-            {/* Photo Attach Button */}
-            <button
-              type="button"
-              onClick={() => chatFileInputRef.current?.click()}
-              className="p-3 text-slate-500 hover:text-blue-900 hover:bg-blue-50 bg-slate-100 rounded-2xl transition cursor-pointer shrink-0 flex items-center justify-center"
-              title="إرفاق صورة أو التقاط بالكاميرا"
-            >
-              <Camera className="w-5 h-5" />
-            </button>
+              {/* Photo Attach Button */}
+              <button
+                type="button"
+                onClick={() => chatFileInputRef.current?.click()}
+                className="p-2 sm:p-2.5 text-slate-500 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 bg-slate-100 dark:bg-slate-800 rounded-xl transition cursor-pointer shrink-0 flex items-center justify-center shadow-2xs"
+                title="إرفاق صورة أو التقاط بالكاميرا"
+              >
+                <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
 
-            {/* Message Text Input */}
-            <input
-              type="text"
-              placeholder="اكتب رسالتك هنا للترحيب بالجيران أو إرسال استفسار..."
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 focus:bg-white rounded-2xl text-xs focus:ring-2 focus:ring-blue-500/20 outline-none text-right font-bold transition"
-            />
+              {/* Message Text Input */}
+              <input
+                type="text"
+                placeholder="اكتب رسالتك هنا للترحيب بالجيران أو إرسال استفسار..."
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                className="flex-1 px-3.5 py-2 sm:py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500/20 outline-none text-right font-bold transition placeholder:text-slate-400"
+              />
 
-            {/* Send Button */}
-            <button
-              type="submit"
-              disabled={!messageText.trim() && !chatImageFile}
-              className="px-5 py-3 bg-blue-900 hover:bg-blue-950 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-2xl font-black transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0 shadow-md shadow-blue-900/10"
-            >
-              <Send className="w-4 h-4 transform rotate-180" />
-              <span className="text-xs">إرسال</span>
-            </button>
-          </form>
+              {/* Send Button */}
+              <button
+                type="submit"
+                disabled={!messageText.trim() && !chatImageFile}
+                className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-blue-900 hover:bg-blue-950 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-xl font-black text-xs sm:text-sm transition flex items-center justify-center gap-1 cursor-pointer active:scale-95 shrink-0 shadow-2xs"
+              >
+                <Send className="w-3.5 h-3.5 transform rotate-180" />
+                <span>إرسال</span>
+              </button>
+            </form>
+          </div>
         </div>
       )}
 

@@ -6,6 +6,7 @@ import {
   submitJoinRequest, 
   fetchAllJoinRequests 
 } from '../services/authStore';
+import { formatMobileNumber, normalizePhoneInput } from '../utils/phoneUtils';
 import { 
   Mail, 
   Lock, 
@@ -128,7 +129,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       const data = await registerAdmin({
         name: adminName.trim(),
-        phone: adminPhone.trim(),
+        phone: formatMobileNumber(adminPhone),
         email: adminEmail.trim(),
         password: adminPassword.trim(),
         securityKey: adminSecurityKey.trim(),
@@ -244,9 +245,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         flatNumber: parseInt(flatNumber),
         residentType,
         ownerName: ownerName.trim(),
-        ownerPhone: ownerPhone.trim(),
+        ownerPhone: formatMobileNumber(ownerPhone),
         tenantName: residentType === 'TENANT' ? tenantName.trim() : '',
-        tenantPhone: residentType === 'TENANT' ? tenantPhone.trim() : '',
+        tenantPhone: residentType === 'TENANT' ? formatMobileNumber(tenantPhone) : '',
         email: registerEmail.trim(),
         password: registerPassword,
       };
@@ -448,254 +449,43 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         )}
 
         {/* ========================================================================= */}
-        {/* MODE 1: UNION PRESIDENT PORTAL (دخول وتسجيل رئيس الاتحاد)                   */}
+        {/* MODE 1: UNION PRESIDENT PORTAL (دخول رئيس الاتحاد)                         */}
         {/* ========================================================================= */}
         {portalMode === 'PRESIDENT' && (
           <div className="space-y-4">
-            {/* Sub-tabs: Login vs Register President */}
-            <div className="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4 text-xs font-black">
+            {/* Official Google Workspace Login - Primary & Sole Option */}
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-950/40 dark:to-indigo-950/30 border-2 border-blue-200 dark:border-blue-800 rounded-2xl space-y-3">
+              <div className="text-right">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-200 text-[10px] font-black rounded-full">
+                    الربط السحابي المباشر
+                  </span>
+                  <span className="text-xs font-black text-blue-950 dark:text-blue-200">
+                    بوابة رئيس الاتحاد
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-bold mt-2 leading-relaxed">
+                  سجل الدخول بحساب Google المعتمد للإدارة (<strong className="text-blue-900 dark:text-blue-300 font-black">waheedsamaha8@gmail.com</strong>) للمزامنة الحية مع Google Drive وجداول Google Sheets وحفظ البيانات والصور.
+                </p>
+              </div>
+
               <button
                 type="button"
-                onClick={() => {
-                  setPresidentTab('login');
-                  setError(null);
-                }}
-                className={`py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  presidentTab === 'login'
-                    ? 'bg-white dark:bg-[#111a2e] text-blue-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full py-3.5 px-4 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition active:scale-[0.99] shadow-md shadow-blue-900/20 flex items-center justify-center gap-2.5 disabled:opacity-50 cursor-pointer"
               >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>دخول رئيس الاتحاد</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPresidentTab('register');
-                  setError(null);
-                }}
-                className={`py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  presidentTab === 'register'
-                    ? 'bg-white dark:bg-[#111a2e] text-blue-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>تسجيل / تفعيل رئيس اتحاد</span>
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                  <g transform="matrix(1, 0, 0, 1, 0, 0)">
+                    <path fill="#EA4335" d="M20.64 12.2c0-.7-.06-1.36-.18-2H12v3.78h4.84c-.2.11-.2.22-.3.43-.54 1.45-1.8 2.5-3.32 2.5a5.18 5.18 0 0 1-4.85-3.6l-2.63 2.03A10.3 10.3 0 0 0 12 22.36c5.73 0 10.55-1.9 14.07-5.18l-5.43-4.98z" />
+                    <path fill="#4285F4" d="M12 22.36c3.24 0 5.95-1.07 7.93-2.91l-5.43-4.98c-1.5.11-3.04-.15-4.21-.86a5.18 5.18 0 0 1-3.3-3.6L4.35 12.04a10.3 10.3 0 0 0 7.65 10.32z" />
+                    <path fill="#FBBC05" d="M4.35 12.04c-.25-.75-.4-1.55-.4-2.38s.15-1.63.4-2.38L1.72 5.25A10.3 10.3 0 0 0 0 9.66c0 1.63.3 3.19.85 4.63l3.5-3.25z" />
+                    <path fill="#34A853" d="M12 4.14c1.76 0 3.3.61 4.54 1.8l3.4-3.15C17.9 1.07 15.24 0 12 0 7.34 0 3.3 2.7 1.25 6.64l3.5 3.25A5.18 5.18 0 0 1 12 4.14z" />
+                  </g>
+                </svg>
+                <span>الدخول وتفعيل مزامنة Google Drive & Sheets</span>
               </button>
             </div>
-
-            {presidentTab === 'login' ? (
-              <div className="space-y-4">
-                {/* Official Google Workspace Login - Primary Option */}
-                <div className="p-3.5 bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-950/40 dark:to-indigo-950/30 border-2 border-blue-200 dark:border-blue-800 rounded-2xl space-y-2.5">
-                  <div className="text-right">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-200 text-[10px] font-black rounded-full">
-                        الخيار الرسمي الموصى به
-                      </span>
-                      <span className="text-xs font-black text-blue-950 dark:text-blue-200">
-                        الربط السحابي المباشر
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-300 font-bold mt-1 leading-relaxed">
-                      سجل الدخول بحساب Google المعتمد (<strong className="text-blue-900 dark:text-blue-300">waheedsamaha8@gmail.com</strong>) لإنشاء وتوليد مجلدات Google Drive وجداول Google Sheets تلقائياً وحفظ الصور والبيانات.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={loading}
-                    className="w-full py-3 px-4 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition active:scale-[0.99] shadow-md shadow-blue-900/20 flex items-center justify-center gap-2.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                      <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                        <path fill="#EA4335" d="M20.64 12.2c0-.7-.06-1.36-.18-2H12v3.78h4.84c-.2.11-.2.22-.3.43-.54 1.45-1.8 2.5-3.32 2.5a5.18 5.18 0 0 1-4.85-3.6l-2.63 2.03A10.3 10.3 0 0 0 12 22.36c5.73 0 10.55-1.9 14.07-5.18l-5.43-4.98z" />
-                        <path fill="#4285F4" d="M12 22.36c3.24 0 5.95-1.07 7.93-2.91l-5.43-4.98c-1.5.11-3.04-.15-4.21-.86a5.18 5.18 0 0 1-3.3-3.6L4.35 12.04a10.3 10.3 0 0 0 7.65 10.32z" />
-                        <path fill="#FBBC05" d="M4.35 12.04c-.25-.75-.4-1.55-.4-2.38s.15-1.63.4-2.38L1.72 5.25A10.3 10.3 0 0 0 0 9.66c0 1.63.3 3.19.85 4.63l3.5-3.25z" />
-                        <path fill="#34A853" d="M12 4.14c1.76 0 3.3.61 4.54 1.8l3.4-3.15C17.9 1.07 15.24 0 12 0 7.34 0 3.3 2.7 1.25 6.64l3.5 3.25A5.18 5.18 0 0 1 12 4.14z" />
-                      </g>
-                    </svg>
-                    <span>الدخول وتفعيل مزامنة Google Drive & Sheets</span>
-                  </button>
-                </div>
-
-                <div className="relative my-2 flex items-center justify-center">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
-                  </div>
-                  <span className="relative px-3 bg-white dark:bg-[#111a2e] text-slate-400 text-[10px] font-bold">أو الدخول بكلمة المرور المحلية</span>
-                </div>
-
-                {/* Local Email/Password Login */}
-                <form onSubmit={handleEmailLogin} className="space-y-3">
-                  <div>
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">البريد الإلكتروني لرئيس الاتحاد</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                        <Mail className="h-4 w-4 text-slate-400" />
-                      </span>
-                      <input
-                        type="email"
-                        required
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        placeholder="waheedsamaha8@gmail.com"
-                        className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">كلمة المرور الإدارية</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                        <Lock className="h-4 w-4 text-slate-400" />
-                      </span>
-                      <input
-                        type="password"
-                        required
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black transition active:scale-[0.99] shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                  >
-                    {loading ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <>
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span>دخول محلي (بدون سحابة Google مباشرة)</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-            ) : (
-              /* Register / Setup President Account */
-              <form onSubmit={handleRegisterAdminSubmit} className="space-y-3">
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl text-[11px] text-blue-900 dark:text-blue-300 font-bold leading-relaxed">
-                  هذا النموذج مخصص حصراً لرئيس مجلس إدارة اتحاد الملاك لمنح وتفعيل الصلاحيات الإدارية الكاملة للنظام.
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">الاسم الكامل لرئيس الاتحاد</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <User className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      value={adminName}
-                      onChange={(e) => setAdminName(e.target.value)}
-                      placeholder="وحيد سماحة"
-                      className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">رقم الهاتف / الواتساب</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <Phone className="h-3.5 w-3.5 text-slate-400" />
-                      </span>
-                      <input
-                        type="tel"
-                        value={adminPhone}
-                        onChange={(e) => setAdminPhone(e.target.value)}
-                        placeholder="010..."
-                        className="w-full pl-2 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
-                        dir="ltr"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">البريد الإلكتروني المعتمد</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <Mail className="h-3.5 w-3.5 text-slate-400" />
-                      </span>
-                      <input
-                        type="email"
-                        required
-                        value={adminEmail}
-                        onChange={(e) => setAdminEmail(e.target.value)}
-                        placeholder="waheedsamaha8@gmail.com"
-                        className="w-full pl-2 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
-                        dir="ltr"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">كلمة المرور المطلوبة</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Lock className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="password"
-                      required
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold text-right">رمز الأمان الإداري الخاص برئيس الاتحاد</label>
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold">(الرمز الافتراضي: admin123)</span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Key className="h-4 w-4 text-amber-500" />
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      value={adminSecurityKey}
-                      onChange={(e) => setAdminSecurityKey(e.target.value)}
-                      placeholder="admin123"
-                      className="w-full pl-4 pr-10 py-2 text-sm bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl focus:border-amber-500 focus:outline-none text-left font-mono font-bold text-amber-900 dark:text-amber-200"
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-sm font-black transition active:scale-[0.99] shadow-md shadow-blue-900/10 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <>
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>تفعيل وتسجيل حساب رئيس الاتحاد فورياً</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
           </div>
         )}
 
@@ -704,25 +494,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         {/* ========================================================================= */}
         {portalMode === 'ASSISTANT' && (
           <div className="space-y-4">
-            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl text-xs text-indigo-900 dark:text-indigo-300 font-bold leading-relaxed flex items-start gap-2">
+            <div className="p-3.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl text-xs text-indigo-900 dark:text-indigo-300 font-bold leading-relaxed flex items-start gap-2">
               <Wrench className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
               <div>
-                قم بإدخال البريد الإلكتروني وكلمة المرور الخاصة بالمساعد الفني المحفوظة في إعدادات النظام للدخول المباشر بالمهام المخصصة (تسجيل التحصيل والمصروفات، الصيانة، دليل الفنيين والأجندة).
+                أدخل البريد الإلكتروني وكلمة المرور المحددة للمساعد الفني في إعدادات النظام للدخول المباشر بالصلاحيات المخصصة.
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setLoginEmail('assistant@pyramids.com');
-                setLoginPassword('assistant123');
-                setError(null);
-              }}
-              className="w-full py-2 px-3 bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-200 dark:border-indigo-800"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>تعبئة البيانات الافتراضية للمساعد الفني (assistant@pyramids.com / assistant123)</span>
-            </button>
 
             <form onSubmit={handleEmailLogin} className="space-y-3.5">
               <div>
@@ -975,7 +752,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                           type="tel"
                           required
                           value={ownerPhone}
-                          onChange={(e) => setOwnerPhone(e.target.value)}
+                          onChange={(e) => setOwnerPhone(normalizePhoneInput(e.target.value))}
+                          onBlur={() => setOwnerPhone(formatMobileNumber(ownerPhone))}
                           placeholder="مثال: 01012345678"
                           className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
                           dir="ltr"
@@ -1009,7 +787,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                           type="tel"
                           required
                           value={tenantPhone}
-                          onChange={(e) => setTenantPhone(e.target.value)}
+                          onChange={(e) => setTenantPhone(normalizePhoneInput(e.target.value))}
+                          onBlur={() => setTenantPhone(formatMobileNumber(tenantPhone))}
                           placeholder="010..."
                           className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
                           dir="ltr"

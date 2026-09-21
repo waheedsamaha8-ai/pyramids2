@@ -25,6 +25,7 @@ import {
   Check
 } from 'lucide-react';
 import { CommunityHeader, CommunityCounts, CommunityServiceId } from './CommunityHeader';
+import { formatMobileNumber, normalizePhoneInput, toWhatsAppNumber } from '../utils/phoneUtils';
 
 interface MaintenanceRequestsProps {
   requests: MaintenanceRequest[];
@@ -110,17 +111,7 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
 
   // WhatsApp Link Formatter
   const formatWhatsAppLink = (phone: string, specialty: string, name: string) => {
-    const digits = phone.replace(/[^0-9]/g, '');
-    let waNumber = digits;
-    if (digits.startsWith('01')) {
-      waNumber = '2' + digits; // 010... -> 2010...
-    } else if (digits.startsWith('002')) {
-      waNumber = digits.substring(2);
-    } else if (digits.startsWith('20')) {
-      waNumber = digits;
-    } else if (digits.length === 10 && digits.startsWith('1')) {
-      waNumber = '20' + digits;
-    }
+    const waNumber = toWhatsAppNumber(phone);
     const msg = `السلام عليكم أستاذ ${name}، أتواصل معك بخصوص أعمال ${specialty} في عمارة بيراميدز فيو ١.`;
     return `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
   };
@@ -169,7 +160,7 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
       id: `cft_${Date.now()}`,
       name: craftsmanName.trim(),
       specialty: craftsmanSpecialty.trim(),
-      phone: craftsmanPhone.trim(),
+      phone: formatMobileNumber(craftsmanPhone),
       notes: craftsmanNotes.trim(),
       addedBy: role === 'RESIDENT' ? (userName ? `${userName} (وحدة ${flatNumber || '?'})` : `وحدة ${flatNumber || 'ساكن'}`) : 'إدارة الاتحاد',
       comments: [],
@@ -187,7 +178,7 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
     setEditingCraftsman(c);
     setEditName(c.name);
     setEditSpecialty(c.specialty);
-    setEditPhone(c.phone);
+    setEditPhone(formatMobileNumber(c.phone));
     setEditNotes(c.notes || '');
   };
 
@@ -199,7 +190,7 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
       ...editingCraftsman,
       name: editName.trim(),
       specialty: editSpecialty.trim(),
-      phone: editPhone.trim(),
+      phone: formatMobileNumber(editPhone),
       notes: editNotes.trim(),
     };
 
@@ -297,7 +288,7 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
   };
 
   return (
-    <div className="w-full space-y-4 text-right animate-fade-in" id="maintenance-panel" dir="rtl">
+    <div className="w-full space-y-2.5 text-right animate-fade-in" id="maintenance-panel" dir="rtl">
       {/* 1. Unified Community Hub Header */}
       <CommunityHeader
         activeService={activeSubTab === 'requests' ? 'maintenance-requests' : 'maintenance-directory'}
@@ -308,8 +299,8 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
             ? 'متابعة بلاغات وإصلاحات مرافق وأعطال العمارة والوحدات السكنية.'
             : 'دليل شامل وموثوق لأرقام وهواتف أمهر الحرفيين المعتمدين مع تقييمات وتجارب السكان.'
         }
-        icon={activeSubTab === 'requests' ? <Wrench className="w-5 h-5" /> : <HardHat className="w-5 h-5" />}
-        badge={activeSubTab === 'requests' ? `${requests.length} بلاغ مسجل` : `${craftsmen.length} فني معتمد`}
+        icon={activeSubTab === 'requests' ? <Wrench className="w-4 h-4" /> : <HardHat className="w-4 h-4" />}
+        badge={activeSubTab === 'requests' ? `${requests.length} بلاغ` : `${craftsmen.length} فني`}
         counts={communityCounts || {
           requests: requests.filter(r => r.status !== 'COMPLETED').length || requests.length,
           craftsmen: craftsmen.length,
@@ -320,19 +311,19 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-lg text-xs font-bold transition shadow-2xs flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span>{showAddForm ? 'إلغاء النموذج' : 'تقديم طلب صيانة جديد'}</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>{showAddForm ? 'إلغاء النموذج' : 'طلب صيانة جديد'}</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setShowAddCraftsmanForm(!showAddCraftsmanForm)}
-                className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white rounded-lg text-xs font-bold transition shadow-2xs flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span>{showAddCraftsmanForm ? 'إلغاء النموذج' : 'إضافة فني / صنايعي جديد'}</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>{showAddCraftsmanForm ? 'إلغاء النموذج' : 'إضافة فني جديد'}</span>
               </button>
             )
           )
@@ -340,34 +331,34 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
       />
 
       {/* 2. Subtabs Switcher (Requests vs Directory) */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-lg w-fit">
         <button
           type="button"
           onClick={() => setActiveSubTab('requests')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
             activeSubTab === 'requests'
-              ? 'bg-blue-900 text-white shadow-xs'
+              ? 'bg-blue-900 text-white shadow-2xs'
               : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
           }`}
         >
-          <Wrench className="w-4 h-4" />
+          <Wrench className="w-3.5 h-3.5" />
           <span>بلاغات وطلبات الصيانة</span>
-          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md ${activeSubTab === 'requests' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeSubTab === 'requests' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
             {requests.length}
           </span>
         </button>
         <button
           type="button"
           onClick={() => setActiveSubTab('directory')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
             activeSubTab === 'directory'
-              ? 'bg-blue-900 text-white shadow-xs'
+              ? 'bg-blue-900 text-white shadow-2xs'
               : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
           }`}
         >
-          <HardHat className="w-4 h-4" />
+          <HardHat className="w-3.5 h-3.5" />
           <span>دليل الفنيين والصنايعية</span>
-          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md ${activeSubTab === 'directory' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeSubTab === 'directory' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
             {craftsmen.length}
           </span>
         </button>
@@ -798,10 +789,12 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">رقم الهاتف / الواتساب</label>
                   <input
                     type="tel"
+                    dir="ltr"
                     placeholder="مثال: 01012345678"
                     value={craftsmanPhone}
-                    onChange={(e) => setCraftsmanPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-bold outline-none focus:border-blue-500 transition"
+                    onChange={(e) => setCraftsmanPhone(normalizePhoneInput(e.target.value))}
+                    onBlur={() => setCraftsmanPhone(formatMobileNumber(craftsmanPhone))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-bold outline-none focus:border-blue-500 transition text-right"
                     required
                   />
                 </div>
@@ -1032,9 +1025,11 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5">رقم الهاتف / الواتساب</label>
                   <input
                     type="tel"
+                    dir="ltr"
                     value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-bold outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 transition"
+                    onChange={(e) => setEditPhone(normalizePhoneInput(e.target.value))}
+                    onBlur={() => setEditPhone(formatMobileNumber(editPhone))}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-bold outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 transition text-right"
                     required
                   />
                 </div>

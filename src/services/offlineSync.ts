@@ -3,10 +3,42 @@ import * as googleApi from './googleApi';
 
 const QUEUE_KEY = 'offline_actions_queue';
 
-// Get queued actions
+// Get queued actions with automatic sanitization of oversized base64 data to prevent Google Sheets 50,000 cell limit errors
 export function getOfflineQueue(): OfflineAction[] {
   const queueJson = localStorage.getItem(QUEUE_KEY);
-  return queueJson ? JSON.parse(queueJson) : [];
+  if (!queueJson) return [];
+  try {
+    const queue: OfflineAction[] = JSON.parse(queueJson);
+    if (!Array.isArray(queue)) return [];
+
+    let modified = false;
+    for (const action of queue) {
+      if (action && action.payload && typeof action.payload === 'object') {
+        const p = action.payload;
+        // Check for base64 or oversized strings in fields destined for Google Sheets cells
+        for (const key of Object.keys(p)) {
+          if (typeof p[key] === 'string') {
+            if (p[key].startsWith('data:')) {
+              if (!p.base64Image) {
+                p.base64Image = p[key];
+              }
+              p[key] = ''; // Remove raw base64 from sheet cell field
+              modified = true;
+            } else if (p[key].length > 45000) {
+              p[key] = p[key].substring(0, 45000);
+              modified = true;
+            }
+          }
+        }
+      }
+    }
+    if (modified) {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    }
+    return queue;
+  } catch {
+    return [];
+  }
 }
 
 // Clear or update queued actions
@@ -17,10 +49,21 @@ export function saveOfflineQueue(queue: OfflineAction[]) {
 // Add an action to the queue
 export function enqueueAction(type: OfflineAction['type'], payload: any) {
   const queue = getOfflineQueue();
+  // Deep clone and sanitize payload for storage
+  const sanitizedPayload = { ...payload };
+  if (typeof sanitizedPayload.fileId === 'string' && sanitizedPayload.fileId.startsWith('data:')) {
+    if (!sanitizedPayload.base64Image) sanitizedPayload.base64Image = sanitizedPayload.fileId;
+    sanitizedPayload.fileId = '';
+  }
+  if (typeof sanitizedPayload.imageUrl === 'string' && sanitizedPayload.imageUrl.startsWith('data:')) {
+    if (!sanitizedPayload.base64Image) sanitizedPayload.base64Image = sanitizedPayload.imageUrl;
+    sanitizedPayload.imageUrl = '';
+  }
+
   const newAction: OfflineAction = {
     id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     type,
-    payload,
+    payload: sanitizedPayload,
     timestamp: Date.now(),
   };
   queue.push(newAction);
@@ -282,63 +325,105 @@ export async function syncOfflineQueue(onProgress?: (msg: string) => void): Prom
         case 'DELETE_RESIDENT':
           await googleApi.deleteResidentSheet(action.payload.id);
           break;
-        case 'ADD_PAYMENT':
-          // If the payload has local base64 but not fileId, upload to Google Drive first
-          if (action.payload.base64Image && !action.payload.fileId) {
-            onProgress?.(`رفع صورة الإيصال لـ ${action.payload.residentName} إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Receipt_${action.payload.receiptNumber || action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.fileId = fileId;
-            // Clean local base64 to save local storage size
-            delete action.payload.base64Image;
+        case 'ADD_PAYMENT': {
+          const rawBase64 = action.payload.base64Image || (action.payload.fileId?.startsWith('data:') ? action.payload.fileId : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الإيصال لـ ${action.payload.residentName || 'الساكن'} إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Receipt_${action.payload.receiptNumber || action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.fileId = fileId;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload receipt image to Drive:', uErr);
+              action.payload.fileId = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.fileId?.startsWith('data:')) {
+            action.payload.fileId = '';
           }
           await googleApi.addPaymentSheet(action.payload);
           break;
-        case 'EDIT_PAYMENT':
-          if (action.payload.base64Image && !action.payload.fileId) {
-            onProgress?.(`رفع صورة الإيصال المحدثة إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Receipt_${action.payload.receiptNumber || action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.fileId = fileId;
-            delete action.payload.base64Image;
+        }
+        case 'EDIT_PAYMENT': {
+          const rawBase64 = action.payload.base64Image || (action.payload.fileId?.startsWith('data:') ? action.payload.fileId : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الإيصال المحدثة إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Receipt_${action.payload.receiptNumber || action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.fileId = fileId;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload receipt image to Drive:', uErr);
+              action.payload.fileId = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.fileId?.startsWith('data:')) {
+            action.payload.fileId = '';
           }
           await googleApi.editPaymentSheet(action.payload);
           break;
+        }
         case 'DELETE_PAYMENT':
           await googleApi.deletePaymentSheet(action.payload.id);
           break;
-        case 'ADD_EXPENSE':
-          if (action.payload.base64Image && !action.payload.fileId) {
-            onProgress?.(`رفع صورة الفاتورة للمصروف إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Invoice_${action.payload.expenseType}_${action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.fileId = fileId;
-            delete action.payload.base64Image;
+        case 'ADD_EXPENSE': {
+          const rawBase64 = action.payload.base64Image || (action.payload.fileId?.startsWith('data:') ? action.payload.fileId : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الفاتورة للمصروف إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Invoice_${action.payload.expenseType || 'Expense'}_${action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.fileId = fileId;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload invoice to Drive:', uErr);
+              action.payload.fileId = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.fileId?.startsWith('data:')) {
+            action.payload.fileId = '';
           }
           await googleApi.addExpenseSheet(action.payload);
           break;
-        case 'EDIT_EXPENSE':
-          if (action.payload.base64Image && !action.payload.fileId) {
-            onProgress?.(`رفع صورة الفاتورة المحدثة إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Invoice_${action.payload.expenseType}_${action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.fileId = fileId;
-            delete action.payload.base64Image;
+        }
+        case 'EDIT_EXPENSE': {
+          const rawBase64 = action.payload.base64Image || (action.payload.fileId?.startsWith('data:') ? action.payload.fileId : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الفاتورة المحدثة إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Invoice_${action.payload.expenseType || 'Expense'}_${action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.fileId = fileId;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload invoice to Drive:', uErr);
+              action.payload.fileId = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.fileId?.startsWith('data:')) {
+            action.payload.fileId = '';
           }
           await googleApi.editExpenseSheet(action.payload);
           break;
+        }
         case 'DELETE_EXPENSE':
           await googleApi.deleteExpenseSheet(action.payload.id);
           break;
@@ -357,19 +442,30 @@ export async function syncOfflineQueue(onProgress?: (msg: string) => void): Prom
         case 'DELETE_CRAFTSMAN':
           await googleApi.deleteCraftsmanSheet(action.payload.id || action.payload);
           break;
-        case 'ADD_CHAT_MESSAGE':
-          if (action.payload.base64Image && !action.payload.imageUrl) {
-            onProgress?.(`رفع صورة الدردشة إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Chat_${action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-            delete action.payload.base64Image;
+        case 'ADD_CHAT_MESSAGE': {
+          const rawBase64 = action.payload.base64Image || (action.payload.imageUrl?.startsWith('data:') ? action.payload.imageUrl : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الدردشة إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Chat_${action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload chat image to Drive:', uErr);
+              action.payload.imageUrl = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.imageUrl?.startsWith('data:')) {
+            action.payload.imageUrl = '';
           }
           await googleApi.addChatMessageSheet(action.payload);
           break;
+        }
         case 'SET_ALL_CHAT':
           await googleApi.setAllChatMessagesSheet(action.payload);
           break;
@@ -391,32 +487,54 @@ export async function syncOfflineQueue(onProgress?: (msg: string) => void): Prom
         case 'DELETE_POLL':
           await googleApi.deletePollSheet(action.payload.id || action.payload);
           break;
-        case 'ADD_COMPLAINT':
-          if (action.payload.base64Image && !action.payload.imageUrl) {
-            onProgress?.(`رفع صورة الشكوى إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Complaint_${action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-            delete action.payload.base64Image;
+        case 'ADD_COMPLAINT': {
+          const rawBase64 = action.payload.base64Image || (action.payload.imageUrl?.startsWith('data:') ? action.payload.imageUrl : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الشكوى إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Complaint_${action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload complaint image to Drive:', uErr);
+              action.payload.imageUrl = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.imageUrl?.startsWith('data:')) {
+            action.payload.imageUrl = '';
           }
           await googleApi.addComplaintSheet(action.payload);
           break;
-        case 'EDIT_COMPLAINT':
-          if (action.payload.base64Image && !action.payload.imageUrl) {
-            onProgress?.(`رفع صورة الشكوى إلى Google Drive...`);
-            const fileId = await googleApi.uploadFileToDrive(
-              `Complaint_${action.payload.id}`,
-              action.payload.base64Image,
-              'image/jpeg'
-            );
-            action.payload.imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-            delete action.payload.base64Image;
+        }
+        case 'EDIT_COMPLAINT': {
+          const rawBase64 = action.payload.base64Image || (action.payload.imageUrl?.startsWith('data:') ? action.payload.imageUrl : undefined);
+          if (rawBase64) {
+            try {
+              onProgress?.(`رفع صورة الشكوى إلى Google Drive...`);
+              const fileId = await googleApi.uploadFileToDrive(
+                `Complaint_${action.payload.id}`,
+                rawBase64,
+                'image/jpeg'
+              );
+              action.payload.imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+              delete action.payload.base64Image;
+            } catch (uErr) {
+              console.warn('[Offline Sync] Failed to upload complaint image to Drive:', uErr);
+              action.payload.imageUrl = '';
+              delete action.payload.base64Image;
+            }
+          }
+          if (action.payload.imageUrl?.startsWith('data:')) {
+            action.payload.imageUrl = '';
           }
           await googleApi.editComplaintSheet(action.payload);
           break;
+        }
         case 'DELETE_COMPLAINT':
           await googleApi.deleteComplaintSheet(action.payload.id || action.payload);
           break;
@@ -453,6 +571,11 @@ export async function syncOfflineQueue(onProgress?: (msg: string) => void): Prom
       const isNotFoundError = error?.message?.includes('لم يتم العثور على') || 
                              error?.message?.toLowerCase().includes('not found');
 
+      const isCellLimitError = error?.message?.includes('50000') ||
+                               error?.message?.includes('الحروف في خلية واحدة') ||
+                               error?.message?.includes('exceeds the maximum') ||
+                               error?.message?.includes('characters in a single cell');
+
       if (isNotInitError) {
         console.warn(`[Offline Sync] Postponing action ${action.id}: Google spreadsheet is not initialized yet.`);
         remainingActions.push(action);
@@ -467,6 +590,10 @@ export async function syncOfflineQueue(onProgress?: (msg: string) => void): Prom
         console.info(`[Offline Sync Cleanup] Action ${action.id} skipped - record not found (likely deleted or replaced).`, error.message);
         // Do NOT push to remainingActions - we discard it because retrying won't help
         successCount++; // Count as "processed" to allow the queue to move forward
+      } else if (isCellLimitError) {
+        console.warn(`[Offline Sync Cleanup] Action ${action.id} discarded because its payload exceeded Google Sheets 50,000 char cell limit. Queue unblocked.`, error.message);
+        // Do NOT push to remainingActions - allow sync queue to progress
+        successCount++;
       } else {
         console.error(`Failed to sync action ${action.id}:`, error);
         // If it's another error (network, etc.), keep it in the queue to try again later

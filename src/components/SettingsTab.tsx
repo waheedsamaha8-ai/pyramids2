@@ -13,6 +13,7 @@ interface SettingsTabProps {
   config: AppConfig;
   role: UserRole;
   onSaveConfig: (updatedConfig: AppConfig) => void;
+  onNotification?: (title: string, message: string, type: 'success' | 'info' | 'warning' | 'error') => void;
   rules?: string[];
   onAddRule?: (ruleText: string) => void;
   onDeleteRule?: (index: number) => void;
@@ -25,6 +26,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   config,
   role,
   onSaveConfig,
+  onNotification,
   rules = [],
   onAddRule,
   onDeleteRule,
@@ -88,32 +90,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   }));
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  // Admin Resident Profile state
-  const [adminFlatNumber, setAdminFlatNumber] = useState<number | string>(config.adminResidentProfile?.flatNumber || 207);
-  const [adminResidentName, setAdminResidentName] = useState<string>(config.adminResidentProfile?.name || 'وحيد سماحة (رئيس الاتحاد)');
-  const [adminResidentPhone, setAdminResidentPhone] = useState<string>(config.adminResidentProfile?.phone || '');
-  const [adminActivityType, setAdminActivityType] = useState<string>(config.adminResidentProfile?.activityType || 'سكني');
-  const [adminOwnershipType, setAdminOwnershipType] = useState<string>(config.adminResidentProfile?.ownershipType || 'تمليك');
-  const [adminMonthlyFee, setAdminMonthlyFee] = useState<number>(config.adminResidentProfile?.monthlyFee || 400);
-  const [adminInitialBalance, setAdminInitialBalance] = useState<number>(config.adminResidentProfile?.initialBalance || 0);
-  const [adminNotes, setAdminNotes] = useState<string>(config.adminResidentProfile?.notes || 'رئيس اتحاد الملاك');
-  const [adminProfileSaved, setAdminProfileSaved] = useState(false);
-
   useEffect(() => {
     if (config.accountingStartDate) setAccountingStartDate(config.accountingStartDate);
     if (config.defaultMonthlyFee) setDefaultMonthlyFee(config.defaultMonthlyFee);
     if (config.activityDefaultFees) {
       setActivityFees({ ...defaultFeesMap, ...config.activityDefaultFees });
-    }
-    if (config.adminResidentProfile) {
-      setAdminFlatNumber(config.adminResidentProfile.flatNumber || 207);
-      setAdminResidentName(config.adminResidentProfile.name || 'وحيد سماحة (رئيس الاتحاد)');
-      setAdminResidentPhone(config.adminResidentProfile.phone || '');
-      setAdminActivityType(config.adminResidentProfile.activityType || 'سكني');
-      setAdminOwnershipType(config.adminResidentProfile.ownershipType || 'تمليك');
-      setAdminMonthlyFee(config.adminResidentProfile.monthlyFee !== undefined ? config.adminResidentProfile.monthlyFee : 400);
-      setAdminInitialBalance(config.adminResidentProfile.initialBalance || 0);
-      setAdminNotes(config.adminResidentProfile.notes || 'رئيس اتحاد الملاك');
     }
   }, [config]);
 
@@ -124,6 +105,65 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   const [editingItem, setEditingItem] = useState<{ key: 'activityTypes' | 'paymentTypes' | 'expenseTypes'; originalValue: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+
+  // Editing Modal state for Types
+  const [editingModal, setEditingModal] = useState<{
+    key: 'activityTypes' | 'paymentTypes' | 'expenseTypes';
+    originalValue: string;
+    newValue: string;
+    fee: number;
+    error?: string;
+  } | null>(null);
+
+  const openEditModal = (key: 'activityTypes' | 'paymentTypes' | 'expenseTypes', value: string) => {
+    const currentFee = activityFees[value] !== undefined ? activityFees[value] : (defaultFeesMap[value] ?? 400);
+    setEditingModal({
+      key,
+      originalValue: value,
+      newValue: value,
+      fee: currentFee,
+      error: undefined,
+    });
+  };
+
+  const handleConfirmEditModal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingModal) return;
+    const trimmedVal = editingModal.newValue.trim();
+    if (!trimmedVal) {
+      setEditingModal(prev => prev ? { ...prev, error: 'يرجى إدخال اسم النوع' } : null);
+      return;
+    }
+
+    const key = editingModal.key;
+    const isDuplicate = config[key].some(item => item === trimmedVal && item !== editingModal.originalValue);
+    if (isDuplicate) {
+      setEditingModal(prev => prev ? { ...prev, error: 'هذا الاسم مستخدم بالفعل في القائمة' } : null);
+      return;
+    }
+
+    const updatedList = config[key].map(item => item === editingModal.originalValue ? trimmedVal : item);
+    
+    let updatedActivityFees = { ...defaultFeesMap, ...(config.activityDefaultFees || {}), ...activityFees };
+    if (key === 'activityTypes') {
+      delete updatedActivityFees[editingModal.originalValue];
+      updatedActivityFees[trimmedVal] = Number(editingModal.fee) >= 0 ? Number(editingModal.fee) : 0;
+      setActivityFees(updatedActivityFees);
+    }
+
+    const updated: AppConfig = {
+      ...config,
+      [key]: updatedList,
+      ...(key === 'activityTypes' ? { activityDefaultFees: updatedActivityFees } : {})
+    };
+
+    onSaveConfig(updated);
+    if (onNotification) {
+      const typeLabel = key === 'activityTypes' ? 'نوع الوحدة' : key === 'paymentTypes' ? 'نوع التحصيل' : 'نوع المصروف';
+      onNotification('تم تعديل النوع بنجاح', `تم تحديث ${typeLabel} إلى "${trimmedVal}" بنجاح.`, 'success');
+    }
+    setEditingModal(null);
+  };
 
   // Helper to start inline editing
   const startEditing = (key: 'activityTypes' | 'paymentTypes' | 'expenseTypes', value: string) => {
@@ -141,7 +181,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
     const updatedList = config[key].map(item => item === editingItem.originalValue ? trimmedVal : item);
     
-    let updatedActivityFees = { ...config.activityDefaultFees };
+    let updatedActivityFees = { ...config.activityDefaultFees, ...activityFees };
     if (key === 'activityTypes') {
       const currentFee = updatedActivityFees[editingItem.originalValue] ?? 0;
       delete updatedActivityFees[editingItem.originalValue];
@@ -155,6 +195,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       ...(key === 'activityTypes' ? { activityDefaultFees: updatedActivityFees } : {})
     };
     onSaveConfig(updated);
+    if (onNotification) {
+      onNotification('تم تعديل النوع بنجاح', `تم تعديل النوع إلى "${trimmedVal}" بنجاح.`, 'success');
+    }
     setEditingItem(null);
     setEditValue('');
   };
@@ -228,31 +271,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     };
     onSaveConfig(updated);
     setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
-  };
-
-  const handleSaveAdminProfile = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!isAdmin) return;
-
-    const profile: AdminResidentProfile = {
-      flatNumber: Number(adminFlatNumber) || 207,
-      name: adminResidentName.trim() || 'وحيد سماحة (رئيس الاتحاد)',
-      phone: adminResidentPhone.trim(),
-      activityType: adminActivityType || 'سكني',
-      ownershipType: adminOwnershipType || 'تمليك',
-      monthlyFee: Number(adminMonthlyFee) >= 0 ? Number(adminMonthlyFee) : 400,
-      initialBalance: Number(adminInitialBalance) || 0,
-      notes: adminNotes.trim() || 'رئيس اتحاد الملاك',
-    };
-
-    const updated: AppConfig = {
-      ...config,
-      adminResidentProfile: profile,
-    };
-    onSaveConfig(updated);
-    setAdminProfileSaved(true);
-    setTimeout(() => setAdminProfileSaved(false), 3500);
+    if (onNotification) {
+      onNotification('تم حفظ الإعدادات', 'تم حفظ وتطبيق تاريخ بدء المحاسبة والاشتراكات بنجاح.', 'success');
+    }
+    setTimeout(() => setSavedSuccess(false), 4000);
   };
 
   const handleResetDefaultActivityFees = () => {
@@ -351,42 +373,61 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <h2 className="text-lg font-black text-slate-900">إعدادات النظام والتحكم</h2>
           <p className="text-xs text-slate-500 mt-0.5 font-bold">تحديد تاريخ بدء المحاسبة وحساب المديونيات، تهيئة المصنفات، وإدارة الصلاحيات واللوائح.</p>
         </div>
-        
-        <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
-          {/* Toggle sub-tabs */}
-          <div className="flex flex-wrap bg-slate-100 p-0.5 rounded-xl w-fit gap-0.5">
-            <button
-              onClick={() => setActiveSubTab('settings')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'settings' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              <Calendar className="w-3.5 h-3.5 text-blue-800" />
-              <span>إعدادات</span>
-            </button>
-            {isAdmin && (
-              <button
-                onClick={() => setActiveSubTab('storage')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'storage' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-              >
-                <HardDrive className="w-3.5 h-3.5 text-emerald-700" />
-                <span>سحابة جوجل (Drive & Sheets)</span>
-              </button>
-            )}
-            <button
-              onClick={() => setActiveSubTab('permissions')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'permissions' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>الاختصاصات والصلاحيات</span>
-            </button>
-            <button
-              onClick={() => setActiveSubTab('types')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${activeSubTab === 'types' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>تهيئة المصنفات والأنواع</span>
-            </button>
-          </div>
-        </div>
+      </div>
+
+      {/* 4 Tabs Side-by-Side as explicitly requested */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/60 shadow-xs w-full">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('settings')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'settings' 
+              ? 'bg-blue-900 text-white shadow-sm' 
+              : 'bg-white/90 text-slate-700 hover:bg-white hover:text-slate-950'
+          }`}
+        >
+          <Calendar className={`w-4 h-4 ${activeSubTab === 'settings' ? 'text-white' : 'text-blue-800'}`} />
+          <span>تبويب اعدادات</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('storage')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'storage' 
+              ? 'bg-blue-900 text-white shadow-sm' 
+              : 'bg-white/90 text-slate-700 hover:bg-white hover:text-slate-950'
+          }`}
+        >
+          <Cloud className={`w-4 h-4 ${activeSubTab === 'storage' ? 'text-white' : 'text-emerald-700'}`} />
+          <span>تبويب سحابة</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('permissions')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'permissions' 
+              ? 'bg-blue-900 text-white shadow-sm' 
+              : 'bg-white/90 text-slate-700 hover:bg-white hover:text-slate-950'
+          }`}
+        >
+          <Shield className={`w-4 h-4 ${activeSubTab === 'permissions' ? 'text-white' : 'text-amber-700'}`} />
+          <span>تبويب الصلاحيات</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('types')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'types' 
+              ? 'bg-blue-900 text-white shadow-sm' 
+              : 'bg-white/90 text-slate-700 hover:bg-white hover:text-slate-950'
+          }`}
+        >
+          <Settings className={`w-4 h-4 ${activeSubTab === 'types' ? 'text-white' : 'text-purple-700'}`} />
+          <span>تبويب الأنواع</span>
+        </button>
       </div>
 
       {!isAdmin && (
@@ -399,205 +440,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {activeSubTab === 'settings' && (
         <div className="space-y-3.5 text-right">
 
-          {/* Card 1: Union President Resident Details */}
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
-              <div className="text-right">
-                <div className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center">
-                    <UserCheck className="w-4 h-4" />
-                  </span>
-                  <h3 className="text-sm font-black text-slate-900">بيانات رئيس الاتحاد (كساكن في المبنى)</h3>
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-full text-[10px] font-black">
-                    رئيس اتحاد الملاك
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 font-bold mt-1 leading-relaxed">
-                  رئيس الاتحاد يعتبر ساكناً أساسياً في المبنى؛ يتم حفظ هذه البيانات وتضمينها تلقائياً كبيانات ساكن عند إنشاء وتوليد هيكل السكان والوحدات.
-                </p>
-              </div>
-
-              {adminProfileSaved && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black animate-fade-in self-start sm:self-auto">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>تم حفظ وتحديث بيانات رئيس الاتحاد!</span>
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleSaveAdminProfile} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* 1. Flat Number */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Home className="w-3.5 h-3.5 text-blue-900" />
-                    <span>رقم وحدة / شقة رئيس الاتحاد:</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={adminFlatNumber}
-                    onChange={(e) => setAdminFlatNumber(Number(e.target.value) || 207)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: 207"
-                    required
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">رقم الشقة الخاصة برئيس الاتحاد</p>
-                </div>
-
-                {/* 2. Resident Name */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-blue-900" />
-                    <span>اسم رئيس الاتحاد (الساكن):</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={adminResidentName}
-                    onChange={(e) => setAdminResidentName(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: وحيد سماحة"
-                    required
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">الاسم الذي يظهر في كشوف السكان</p>
-                </div>
-
-                {/* 3. Phone */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-blue-900" />
-                    <span>رقم الهاتف / التواصل:</span>
-                  </label>
-                  <input
-                    type="tel"
-                    value={adminResidentPhone}
-                    onChange={(e) => setAdminResidentPhone(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="مثال: 01012345678"
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">للتواصل وسندات القبض</p>
-                </div>
-
-                {/* 4. Activity Type */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-blue-900" />
-                    <span>نوع نشاط الوحدة:</span>
-                  </label>
-                  <select
-                    value={adminActivityType}
-                    onChange={(e) => {
-                      const newType = e.target.value;
-                      setAdminActivityType(newType);
-                      const defaultFee = activityFees[newType] ?? defaultFeesMap[newType] ?? 400;
-                      setAdminMonthlyFee(defaultFee);
-                    }}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right cursor-pointer"
-                  >
-                    {config.activityTypes.map(act => (
-                      <option key={act} value={act}>{act}</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-slate-400 font-bold">تصنيف نشاط شقة رئيس الاتحاد</p>
-                </div>
-
-                {/* 5. Ownership Type */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-blue-900" />
-                    <span>نوع الملكية:</span>
-                  </label>
-                  <select
-                    value={adminOwnershipType}
-                    onChange={(e) => setAdminOwnershipType(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right cursor-pointer"
-                  >
-                    <option value="تمليك">تمليك (مالك)</option>
-                    <option value="إيجار">إيجار (مستأجر)</option>
-                  </select>
-                  <p className="text-[10px] text-slate-400 font-bold">صفة ملكية الوحدة</p>
-                </div>
-
-                {/* 6. Monthly Fee */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>الاشتراك الشهري للشقة:</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="10"
-                      value={adminMonthlyFee}
-                      onChange={(e) => setAdminMonthlyFee(Number(e.target.value) || 0)}
-                      disabled={!isAdmin}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                      placeholder="400"
-                    />
-                    <span className="text-xs font-bold text-slate-500 shrink-0">ج.م/شهر</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-bold">قيمة الاشتراك المحسوبة شهرياً</p>
-                </div>
-
-                {/* 7. Initial Balance */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-blue-900" />
-                    <span>الرصيد الافتتاحي (السابق):</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={adminInitialBalance}
-                      onChange={(e) => setAdminInitialBalance(Number(e.target.value) || 0)}
-                      disabled={!isAdmin}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                      placeholder="0"
-                    />
-                    <span className="text-xs font-bold text-slate-500 shrink-0">ج.م</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-bold">موجب = دائن | سالب = مديونية</p>
-                </div>
-
-                {/* 8. Notes */}
-                <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
-                  <label className="block text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <BadgeCheck className="w-3.5 h-3.5 text-amber-600" />
-                    <span>الصفة / الملاحظات:</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none transition disabled:bg-slate-100 text-right"
-                    placeholder="رئيس اتحاد الملاك"
-                  />
-                  <p className="text-[10px] text-slate-400 font-bold">الملاحظات المسجلة في الكشف</p>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <div className="flex items-center justify-end pt-2 border-t border-slate-100">
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-xs hover:shadow transition flex items-center gap-2 cursor-pointer active:scale-98"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>حفظ وتثبيت بيانات رئيس الاتحاد كساكن</span>
-                  </button>
-                </div>
-              )}
-            </form>
-          </div>
-
-          {/* Card 2: Accounting start date and fee defaults */}
+          {/* Card: Accounting start date and fee defaults */}
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-3 gap-2">
               <div className="text-right">
@@ -613,54 +456,69 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </div>
 
               {savedSuccess && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black animate-fade-in self-start sm:self-auto">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>تم حفظ الإعدادات بنجاح!</span>
+                <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black animate-fade-in self-start sm:self-auto">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>تم حفظ وتطبيق الإعدادات بنجاح!</span>
                 </div>
               )}
             </div>
 
             <form onSubmit={handleSaveAccountingSettings} className="space-y-4">
-              {/* 1. Start Date Picker */}
+              {/* 1. Start Date Picker and Preset Buttons in One Row */}
               <div className="p-3.5 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-2.5">
                 <label className="block text-xs font-black text-slate-800">
                   تاريخ بدء المحاسبة (سنة - شهر - يوم):
                 </label>
-                <div className="flex items-center gap-2">
+                
+                {/* 3 Controls on One Single Row */}
+                <div className="flex flex-row items-center gap-2 w-full">
                   <input
                     type="date"
                     value={accountingStartDate}
                     onChange={(e) => setAccountingStartDate(e.target.value)}
                     disabled={!isAdmin}
-                    className="flex-1 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-black text-slate-800 outline-none transition disabled:bg-slate-100 cursor-pointer"
+                    className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-xs font-black text-slate-800 outline-none transition disabled:bg-slate-100 cursor-pointer text-center"
                     required
                   />
+
+                  {/* Quick Preset Buttons */}
+                  {isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setAccountingStartDate('2026-01-01')}
+                        className={`px-2.5 sm:px-3 py-2 text-[10.5px] sm:text-[11px] font-bold rounded-xl transition border cursor-pointer shrink-0 whitespace-nowrap shadow-2xs ${
+                          accountingStartDate === '2026-01-01' 
+                            ? 'bg-blue-900 text-white border-blue-900' 
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        بداية عام 2026 (2026-01-01)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = new Date();
+                          const y = now.getFullYear();
+                          const m = String(now.getMonth() + 1).padStart(2, '0');
+                          setAccountingStartDate(`${y}-${m}-01`);
+                        }}
+                        className={`px-2.5 sm:px-3 py-2 text-[10.5px] sm:text-[11px] font-bold rounded-xl transition border cursor-pointer shrink-0 whitespace-nowrap shadow-2xs ${
+                          (() => {
+                            const now = new Date();
+                            const y = now.getFullYear();
+                            const m = String(now.getMonth() + 1).padStart(2, '0');
+                            return accountingStartDate === `${y}-${m}-01`;
+                          })()
+                            ? 'bg-blue-900 text-white border-blue-900'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        أول الشهر الحالي
+                      </button>
+                    </>
+                  )}
                 </div>
-                
-                {/* Quick Preset Buttons */}
-                {isAdmin && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setAccountingStartDate('2026-01-01')}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition border cursor-pointer ${accountingStartDate === '2026-01-01' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
-                    >
-                      بداية عام 2026 (2026-01-01)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const now = new Date();
-                        const y = now.getFullYear();
-                        const m = String(now.getMonth() + 1).padStart(2, '0');
-                        setAccountingStartDate(`${y}-${m}-01`);
-                      }}
-                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 transition cursor-pointer"
-                    >
-                      أول الشهر الحالي
-                    </button>
-                  </div>
-                )}
 
                 <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
                   * تاريخ البدء الحالي المعتمد: <span className="text-blue-900 font-black">{accountingStartDate}</span> (يتم احتساب <span className="text-slate-900 font-black">{getElapsedMonths()}</span> شهر حتى تاريخ اليوم).
@@ -734,13 +592,37 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
               {/* Action Buttons */}
               {isAdmin && (
-                <div className="flex items-center justify-end pt-2">
+                <div className="flex flex-col sm:flex-row items-center justify-between pt-3 gap-2 border-t border-slate-100">
+                  {savedSuccess ? (
+                    <div className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-black animate-fade-in w-full sm:w-auto">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>تم حفظ وتطبيق تاريخ بدء المحاسبة والاشتراكات بنجاح!</span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 font-bold hidden sm:inline">
+                      يتم حفظ وتطبيق الإعدادات على كشوف الحسابات فور الضغط.
+                    </span>
+                  )}
+
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-blue-900 hover:bg-blue-950 text-white text-xs font-black rounded-xl shadow-sm hover:shadow transition flex items-center gap-2 cursor-pointer active:scale-98"
+                    className={`w-full sm:w-auto px-5 py-2.5 text-xs font-black rounded-xl shadow-sm hover:shadow transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
+                      savedSuccess
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        : 'bg-blue-900 hover:bg-blue-950 text-white'
+                    }`}
                   >
-                    <Check className="w-4 h-4" />
-                    <span>حفظ وتطبيق تاريخ بدء المحاسبة والاشتراكات</span>
+                    {savedSuccess ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>تم الحفظ بنجاح ✓</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>حفظ وتطبيق تاريخ بدء المحاسبة والاشتراكات</span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -1045,64 +927,41 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </form>
             )}
 
-            <div className="flex-1 overflow-y-auto max-h-52 space-y-1.5 pr-1">
+            <div className="space-y-1.5">
               {config.activityTypes.map((type) => {
-                const isEditing = editingItem?.key === 'activityTypes' && editingItem.originalValue === type;
+                const fee = activityFees[type] !== undefined ? activityFees[type] : (defaultFeesMap[type] ?? 400);
                 return (
-                  <div key={type} className="flex items-center justify-between p-1.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-lg transition">
-                    {isEditing ? (
-                      <div className="flex items-center gap-1 w-full" dir="rtl">
+                  <div key={type} className="flex items-center justify-between p-2 bg-slate-50/70 hover:bg-slate-100/70 border border-slate-200/80 rounded-xl transition gap-2">
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => handleSaveEdit('activityTypes')}
-                          className="p-1 text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition cursor-pointer shrink-0"
-                          title="حفظ"
+                          type="button"
+                          onClick={() => handleDeleteItem('activityTypes', type)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition cursor-pointer"
+                          title="حذف هذا النوع"
                         >
-                          <Check className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setEditingItem(null)}
-                          className="p-1 text-slate-400 bg-slate-50 rounded-md hover:bg-slate-100 transition cursor-pointer shrink-0"
-                          title="إلغاء"
+                          type="button"
+                          onClick={() => openEditModal('activityTypes', type)}
+                          className="p-1.5 text-blue-700 hover:bg-blue-100/70 hover:text-blue-900 rounded-lg transition cursor-pointer flex items-center gap-1 text-[11px] font-bold bg-blue-50/80 px-2"
+                          title="تعديل هذا النوع والاشتراك"
                         >
-                          <X className="w-3 h-3" />
+                          <Pencil className="w-3 h-3 text-blue-800" />
+                          <span>تعديل</span>
                         </button>
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="flex-1 px-2 py-0.5 text-xs font-bold bg-white border border-slate-200 rounded-md text-right outline-none min-w-0"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEdit('activityTypes');
-                            else if (e.key === 'Escape') setEditingItem(null);
-                          }}
-                          autoFocus
-                        />
                       </div>
                     ) : (
-                      <>
-                        {isAdmin ? (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => handleDeleteItem('activityTypes', type)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded-md transition cursor-pointer"
-                              title="حذف"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => startEditing('activityTypes', type)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
-                              title="تعديل"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="w-4" />
-                        )}
-                        <span className="text-xs font-extrabold text-indigo-900 truncate">{type}</span>
-                      </>
+                      <span className="w-4" />
                     )}
+
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 shrink-0">
+                        {fee} ج.م
+                      </span>
+                      <span className="text-xs font-black text-indigo-950 truncate">{type}</span>
+                    </div>
                   </div>
                 );
               })}
@@ -1139,64 +998,34 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </form>
             )}
 
-            <div className="flex-1 overflow-y-auto max-h-52 space-y-1.5 pr-1">
+            <div className="space-y-1.5">
               {config.paymentTypes.map((type) => {
-                const isEditing = editingItem?.key === 'paymentTypes' && editingItem.originalValue === type;
                 return (
-                  <div key={type} className="flex items-center justify-between p-1.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-lg transition">
-                    {isEditing ? (
-                      <div className="flex items-center gap-1 w-full" dir="rtl">
+                  <div key={type} className="flex items-center justify-between p-2 bg-slate-50/70 hover:bg-slate-100/70 border border-slate-200/80 rounded-xl transition gap-2">
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => handleSaveEdit('paymentTypes')}
-                          className="p-1 text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition cursor-pointer shrink-0"
-                          title="حفظ"
+                          type="button"
+                          onClick={() => handleDeleteItem('paymentTypes', type)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition cursor-pointer"
+                          title="حذف هذا النوع"
                         >
-                          <Check className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setEditingItem(null)}
-                          className="p-1 text-slate-400 bg-slate-50 rounded-md hover:bg-slate-100 transition cursor-pointer shrink-0"
-                          title="إلغاء"
+                          type="button"
+                          onClick={() => openEditModal('paymentTypes', type)}
+                          className="p-1.5 text-emerald-800 hover:bg-emerald-100/70 rounded-lg transition cursor-pointer flex items-center gap-1 text-[11px] font-bold bg-emerald-50/80 px-2"
+                          title="تعديل هذا النوع"
                         >
-                          <X className="w-3 h-3" />
+                          <Pencil className="w-3 h-3 text-emerald-800" />
+                          <span>تعديل</span>
                         </button>
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="flex-1 px-2 py-0.5 text-xs font-bold bg-white border border-slate-200 rounded-md text-right outline-none min-w-0"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEdit('paymentTypes');
-                            else if (e.key === 'Escape') setEditingItem(null);
-                          }}
-                          autoFocus
-                        />
                       </div>
                     ) : (
-                      <>
-                        {isAdmin ? (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => handleDeleteItem('paymentTypes', type)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded-md transition cursor-pointer"
-                              title="حذف"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => startEditing('paymentTypes', type)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
-                              title="تعديل"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="w-4" />
-                        )}
-                        <span className="text-xs font-extrabold text-emerald-900 truncate">{type}</span>
-                      </>
+                      <span className="w-4" />
                     )}
+                    <span className="text-xs font-black text-emerald-950 truncate">{type}</span>
                   </div>
                 );
               })}
@@ -1233,64 +1062,34 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </form>
             )}
 
-            <div className="flex-1 overflow-y-auto max-h-52 space-y-1.5 pr-1">
+            <div className="space-y-1.5">
               {config.expenseTypes.map((type) => {
-                const isEditing = editingItem?.key === 'expenseTypes' && editingItem.originalValue === type;
                 return (
-                  <div key={type} className="flex items-center justify-between p-1.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-lg transition">
-                    {isEditing ? (
-                      <div className="flex items-center gap-1 w-full" dir="rtl">
+                  <div key={type} className="flex items-center justify-between p-2 bg-slate-50/70 hover:bg-slate-100/70 border border-slate-200/80 rounded-xl transition gap-2">
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => handleSaveEdit('expenseTypes')}
-                          className="p-1 text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition cursor-pointer shrink-0"
-                          title="حفظ"
+                          type="button"
+                          onClick={() => handleDeleteItem('expenseTypes', type)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition cursor-pointer"
+                          title="حذف هذا النوع"
                         >
-                          <Check className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setEditingItem(null)}
-                          className="p-1 text-slate-400 bg-slate-50 rounded-md hover:bg-slate-100 transition cursor-pointer shrink-0"
-                          title="إلغاء"
+                          type="button"
+                          onClick={() => openEditModal('expenseTypes', type)}
+                          className="p-1.5 text-amber-900 hover:bg-amber-100/70 rounded-lg transition cursor-pointer flex items-center gap-1 text-[11px] font-bold bg-amber-50/80 px-2"
+                          title="تعديل هذا النوع"
                         >
-                          <X className="w-3 h-3" />
+                          <Pencil className="w-3 h-3 text-amber-800" />
+                          <span>تعديل</span>
                         </button>
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="flex-1 px-2 py-0.5 text-xs font-bold bg-white border border-slate-200 rounded-md text-right outline-none min-w-0"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEdit('expenseTypes');
-                            else if (e.key === 'Escape') setEditingItem(null);
-                          }}
-                          autoFocus
-                        />
                       </div>
                     ) : (
-                      <>
-                        {isAdmin ? (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => handleDeleteItem('expenseTypes', type)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded-md transition cursor-pointer"
-                              title="حذف"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => startEditing('expenseTypes', type)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
-                              title="تعديل"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="w-4" />
-                        )}
-                        <span className="text-xs font-extrabold text-amber-900 truncate">{type}</span>
-                      </>
+                      <span className="w-4" />
                     )}
+                    <span className="text-xs font-black text-amber-950 truncate">{type}</span>
                   </div>
                 );
               })}
@@ -1346,7 +1145,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             )}
 
             {/* List of rules */}
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <div className="space-y-2">
               {rules.length === 0 ? (
                 <p className="text-center text-xs text-slate-400 font-bold py-4">لا توجد مواد تعليمات مسجلة حالياً.</p>
               ) : (
@@ -1591,6 +1390,95 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal: Edit Type Dialog */}
+      {editingModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" dir="rtl">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-900 flex items-center justify-center">
+                  <Pencil className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    {editingModal.key === 'activityTypes' ? 'تعديل نوع الوحدة' : editingModal.key === 'paymentTypes' ? 'تعديل نوع التحصيل' : 'تعديل نوع المصروف'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-bold">
+                    الاسم الحالي: <span className="text-slate-800 font-black">{editingModal.originalValue}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmEditModal} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-800">
+                  الاسم الجديد:
+                </label>
+                <input
+                  type="text"
+                  value={editingModal.newValue}
+                  onChange={(e) => setEditingModal(prev => prev ? { ...prev, newValue: e.target.value, error: undefined } : null)}
+                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none text-right transition"
+                  placeholder="أدخل الاسم الجديد"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              {editingModal.key === 'activityTypes' && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-800">
+                    الاشتراك الشهري الافتراضي لهذا النشاط:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="10"
+                      value={editingModal.fee}
+                      onChange={(e) => setEditingModal(prev => prev ? { ...prev, fee: Number(e.target.value) || 0 } : null)}
+                      className="flex-1 px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-black text-slate-900 outline-none text-right transition"
+                    />
+                    <span className="text-xs font-bold text-slate-500 shrink-0">ج.م / شهر</span>
+                  </div>
+                </div>
+              )}
+
+              {editingModal.error && (
+                <p className="text-xs text-red-600 font-bold bg-red-50 p-2.5 rounded-xl border border-red-100">
+                  {editingModal.error}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-900 hover:bg-blue-950 text-white text-xs font-black rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>حفظ التعديل</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

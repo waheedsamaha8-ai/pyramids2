@@ -15,6 +15,7 @@ import {
   getResidentMonthlyFee, 
   exportCarriedBalancesForYear 
 } from '../utils/financialCalculations';
+import { formatMobileNumber, normalizePhoneInput } from '../utils/phoneUtils';
 
 export { 
   calculateResidentFinancials, 
@@ -117,10 +118,10 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
         const updatedResident: Resident = {
           ...existingResident,
           name: request.ownerName || existingResident.name,
-          phone: request.ownerPhone || existingResident.phone,
+          phone: formatMobileNumber(request.ownerPhone) || existingResident.phone,
           ownershipType: request.residentType === 'OWNER' ? 'تمليك' : 'إيجار',
           tenantName: request.residentType === 'TENANT' ? request.tenantName : existingResident.tenantName,
-          tenantPhone: request.residentType === 'TENANT' ? request.tenantPhone : existingResident.tenantPhone,
+          tenantPhone: formatMobileNumber(request.tenantPhone) || existingResident.tenantPhone,
         };
         onEdit(updatedResident);
       } else {
@@ -129,12 +130,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
           id: `res_${Date.now()}`,
           flatNumber: request.flatNumber,
           name: request.residentType === 'OWNER' ? request.ownerName : (request.tenantName || 'ساكن جديد'),
-          phone: request.residentType === 'OWNER' ? request.ownerPhone : (request.tenantPhone || ''),
+          phone: formatMobileNumber(request.residentType === 'OWNER' ? request.ownerPhone : (request.tenantPhone || '')),
           activityType: 'سكني',
           notes: `تم الانضمام عبر طلب التسجيل الإلكتروني`,
           ownershipType: request.residentType === 'OWNER' ? 'تمليك' : 'إيجار',
           tenantName: request.residentType === 'TENANT' ? request.tenantName : '',
-          tenantPhone: request.residentType === 'TENANT' ? request.tenantPhone : '',
+          tenantPhone: formatMobileNumber(request.residentType === 'TENANT' ? request.tenantPhone : ''),
           monthlyFee: config?.defaultMonthlyFee || 400,
           initialBalance: 0,
         };
@@ -309,12 +310,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
     setFlatNumber(String(resident.flatNumber));
     setName(resident.name);
     setActivityType(resident.activityType);
-    setPhone(resident.phone || '');
+    setPhone(formatMobileNumber(resident.phone || ''));
     const cleanNotes = (resident.notes || '').includes('توليد تلقائي') ? '' : (resident.notes || '');
     setNotes(cleanNotes);
     setOwnershipType((resident.ownershipType as any) === 'إيجار' ? 'إيجار' : 'تمليك');
     setTenantName(resident.tenantName || '');
-    setTenantPhone(resident.tenantPhone || '');
+    setTenantPhone(formatMobileNumber(resident.tenantPhone || ''));
     const fee = resident.monthlyFee !== undefined && !isNaN(resident.monthlyFee) && resident.monthlyFee > 0
       ? resident.monthlyFee 
       : getDefaultFeeForActivity(resident.activityType);
@@ -392,11 +393,11 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
       flatNumber: flatStr,
       name: name.trim(),
       activityType,
-      phone: phone.trim(),
+      phone: formatMobileNumber(phone),
       notes: notes.trim(),
       ownershipType,
       tenantName: ownershipType === 'إيجار' ? tenantName.trim() : '',
-      tenantPhone: ownershipType === 'إيجار' ? tenantPhone.trim() : '',
+      tenantPhone: ownershipType === 'إيجار' ? formatMobileNumber(tenantPhone) : '',
       monthlyFee: monthlyFee !== '' ? Number(monthlyFee) : (config?.defaultMonthlyFee || 200),
       initialBalance: finalInitialBalance,
     };
@@ -817,12 +818,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                           {res.phone && (
                             <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold" dir="ltr">
                               <a
-                                href={`tel:${res.phone}`}
+                                href={`tel:${formatMobileNumber(res.phone)}`}
                                 className="inline-flex items-center gap-1.5 text-blue-900 hover:text-blue-700 hover:underline font-bold transition px-2 py-1 bg-blue-50/70 hover:bg-blue-100/70 rounded-lg"
-                                title={`اتصال هاتفي بالمالك ${res.name}: ${res.phone}`}
+                                title={`اتصال هاتفي بالمالك ${res.name}: ${formatMobileNumber(res.phone)}`}
                               >
                                 <Phone className="w-3 h-3 text-blue-900 shrink-0" />
-                                <span>{res.phone}</span>
+                                <span>{formatMobileNumber(res.phone)}</span>
                               </a>
                             </div>
                           )}
@@ -839,12 +840,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                               {res.tenantPhone && (
                                 <div className="text-[10px] font-bold text-slate-600 flex items-center gap-1" dir="ltr">
                                   <a
-                                    href={`tel:${res.tenantPhone}`}
+                                    href={`tel:${formatMobileNumber(res.tenantPhone)}`}
                                     className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-950 hover:underline font-bold transition px-1.5 py-0.5 bg-amber-100/60 hover:bg-amber-200/60 rounded-md"
-                                    title={`اتصال هاتفي بالمستأجر ${res.tenantName}: ${res.tenantPhone}`}
+                                    title={`اتصال هاتفي بالمستأجر ${res.tenantName}: ${formatMobileNumber(res.tenantPhone)}`}
                                   >
                                     <Phone className="w-2.5 h-2.5 text-amber-700 shrink-0" />
-                                    <span>{res.tenantPhone}</span>
+                                    <span>{formatMobileNumber(res.tenantPhone)}</span>
                                   </a>
                                 </div>
                               )}
@@ -1031,13 +1032,13 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                             <td className="px-3 py-3 whitespace-nowrap text-slate-600" dir="ltr">
                               {res.phone ? (
                                 <a
-                                  href={`tel:${res.phone}`}
+                                  href={`tel:${formatMobileNumber(res.phone)}`}
                                   onClick={(e) => e.stopPropagation()}
                                   className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 hover:underline font-bold transition px-1.5 py-0.5 rounded-md hover:bg-blue-50"
-                                  title={`اتصال هاتفياً بالمالك ${res.name}: ${res.phone}`}
+                                  title={`اتصال هاتفياً بالمالك ${res.name}: ${formatMobileNumber(res.phone)}`}
                                 >
                                   <Phone className="w-3 h-3 text-blue-900 shrink-0" />
-                                  <span>{res.phone}</span>
+                                  <span>{formatMobileNumber(res.phone)}</span>
                                 </a>
                               ) : (
                                 <span className="text-slate-300 font-normal">—</span>
@@ -1057,13 +1058,13 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                             <td className="px-3 py-3 whitespace-nowrap text-slate-600" dir="ltr">
                               {res.ownershipType === 'إيجار' && res.tenantPhone ? (
                                 <a
-                                  href={`tel:${res.tenantPhone}`}
+                                  href={`tel:${formatMobileNumber(res.tenantPhone)}`}
                                   onClick={(e) => e.stopPropagation()}
                                   className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-950 hover:underline font-bold transition px-1.5 py-0.5 rounded-md hover:bg-amber-50"
-                                  title={`اتصال هاتفياً بالمستأجر ${res.tenantName}: ${res.tenantPhone}`}
+                                  title={`اتصال هاتفياً بالمستأجر ${res.tenantName}: ${formatMobileNumber(res.tenantPhone)}`}
                                 >
                                   <Phone className="w-3 h-3 text-amber-800 shrink-0" />
-                                  <span>{res.tenantPhone}</span>
+                                  <span>{formatMobileNumber(res.tenantPhone)}</span>
                                 </a>
                               ) : (
                                 <span className="text-slate-300 font-normal">—</span>
@@ -1218,7 +1219,8 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                     type="tel"
                     placeholder="01xxxxxxxxx"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(normalizePhoneInput(e.target.value))}
+                    onBlur={() => setPhone(formatMobileNumber(phone))}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200/80 focus:bg-white rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 outline-none text-right font-bold transition"
                   />
                 </div>
@@ -1250,7 +1252,8 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                         type="tel"
                         placeholder="01xxxxxxxxx"
                         value={tenantPhone}
-                        onChange={(e) => setTenantPhone(e.target.value)}
+                        onChange={(e) => setTenantPhone(normalizePhoneInput(e.target.value))}
+                        onBlur={() => setTenantPhone(formatMobileNumber(tenantPhone))}
                         className="w-full px-3 py-2 bg-white border border-amber-200 focus:border-amber-500 rounded-xl text-xs outline-none text-right font-bold transition"
                       />
                     </div>
@@ -1445,7 +1448,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                         {req.ownerPhone && (
                           <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
                             <Phone className="w-3 h-3 shrink-0" />
-                            <span dir="ltr">{req.ownerPhone}</span>
+                            <span dir="ltr">{formatMobileNumber(req.ownerPhone)}</span>
                           </div>
                         )}
                       </td>
@@ -1456,7 +1459,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                             {req.tenantPhone && (
                               <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
                                 <Phone className="w-3 h-3 shrink-0" />
-                                <span dir="ltr">{req.tenantPhone}</span>
+                                <span dir="ltr">{formatMobileNumber(req.tenantPhone)}</span>
                               </div>
                             )}
                           </>

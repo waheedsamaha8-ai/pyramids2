@@ -63,7 +63,7 @@ export async function generateElementImage(elementId: string, fileName: string):
     throw new Error(`Element with id "${elementId}" not found`);
   }
 
-  // Save original styles
+  // Save original styles & class names
   const prevDisplay = elem.style.display;
   const prevPosition = elem.style.position;
   const prevLeft = elem.style.left;
@@ -71,6 +71,11 @@ export async function generateElementImage(elementId: string, fileName: string):
   const prevWidth = elem.style.width;
   const prevZIndex = elem.style.zIndex;
   const prevBg = elem.style.backgroundColor;
+  const hadHiddenClass = elem.classList.contains('hidden');
+
+  if (hadHiddenClass) {
+    elem.classList.remove('hidden');
+  }
 
   // Render offscreen at fixed 850px width for clean paper document layout
   elem.style.display = 'block';
@@ -89,6 +94,17 @@ export async function generateElementImage(elementId: string, fileName: string):
       backgroundColor: '#ffffff',
       windowWidth: 850,
       onclone: (clonedDoc) => {
+        const clonedTarget = clonedDoc.getElementById(elementId);
+        if (clonedTarget) {
+          clonedTarget.classList.remove('hidden');
+          clonedTarget.style.display = 'block';
+          clonedTarget.style.position = 'relative';
+          clonedTarget.style.left = '0';
+          clonedTarget.style.top = '0';
+          clonedTarget.style.width = '850px';
+          clonedTarget.style.backgroundColor = '#ffffff';
+        }
+
         // 1. Sanitize all <style> tags in cloned document to remove/replace oklch, oklab, etc.
         const styleTags = Array.from(clonedDoc.querySelectorAll('style'));
         styleTags.forEach((styleTag) => {
@@ -161,6 +177,9 @@ export async function generateElementImage(elementId: string, fileName: string):
     document.body.removeChild(a);
   } finally {
     // Always restore original element styles
+    if (hadHiddenClass) {
+      elem.classList.add('hidden');
+    }
     elem.style.display = prevDisplay;
     elem.style.position = prevPosition;
     elem.style.left = prevLeft;

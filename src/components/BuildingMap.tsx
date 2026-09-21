@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
+import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
 
 interface BuildingMapProps {
   residents: Resident[];
@@ -234,14 +235,22 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     };
 
     const openWA = (phone: string, text: string) => {
-      const clean = phone.replace(/[^0-9]/g, '');
-      const fullPhone = clean.startsWith('0') ? '20' + clean.slice(1) : clean;
-      window.open(`https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(text)}`, '_blank');
+      const fullPhone = toWhatsAppNumber(phone);
+      if (!fullPhone) {
+        alert('رقم الهاتف غير مسجل أو غير صالح للواتساب');
+        return;
+      }
+      const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(text)}`;
+      const win = window.open(url, '_blank');
+      if (!win || win.closed || typeof win.closed === 'undefined') {
+        window.location.href = url;
+      }
     };
 
     if (target === 'owner' || target === 'both') {
       const text = generateText(resident.name, 'المالك');
-      if (resident.phone) openWA(resident.phone, text);
+      const phone = resident.phone || resident.tenantPhone;
+      if (phone) openWA(phone, text);
       else alert('رقم هاتف المالك غير مسجل');
     }
 
@@ -463,56 +472,38 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     return canvas;
   };
 
-  // Instant Generation & Share / Print Function (< 10ms execution)
-  const handleCaptureAndShareImage = (openWAAfter: boolean = true) => {
+  // Instant Generation & Download Image Function (< 10ms execution)
+  const handleCaptureAndShareImage = (openWAAfter: boolean = false) => {
     if (!financials) return;
     setIsGeneratingImage(true);
 
-    setTimeout(() => {
-      try {
-        const canvas = generateNativeReceiptCanvas();
-        const dataUrl = canvas.toDataURL('image/png');
-        const flatNum = financials.resident.flatNumber;
-        const fileName = `إيصال_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`;
+    try {
+      const canvas = generateNativeReceiptCanvas();
+      const dataUrl = canvas.toDataURL('image/png');
+      const flatNum = financials.resident.flatNumber;
+      const isPaid = financials.currentMonthStatus === 'مسدد';
+      const fileName = isPaid 
+        ? `إيصال_سداد_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`
+        : `إشعار_مطالبة_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`;
 
-        // Instant Download
-        const link = document.createElement('a');
-        link.download = fileName;
-        link.href = dataUrl;
-        link.click();
+      // 1. Instant Download of Image File to Device
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-        // Always open WhatsApp for registered number if requested
-        if (openWAAfter) {
-          sendWhatsAppReceipt('owner');
-        }
-
-        // Native File Share (for mobile devices)
-        canvas.toBlob(async (blob) => {
-          if (blob) {
-            const file = new File([blob], fileName, { type: 'image/png' });
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              try {
-                await navigator.share({
-                  files: [file],
-                  title: `إيصال شقة ${flatNum}`,
-                  text: `إيصال شقة ${flatNum} - اتحاد ملاك بيراميدز فيو ١`,
-                });
-              } catch (shareErr) {
-                // User closed native share sheet
-              }
-            }
-          }
-          setIsGeneratingImage(false);
-        }, 'image/png');
-
-      } catch (err) {
-        console.error('Error generating instant canvas image:', err);
-        setIsGeneratingImage(false);
-        if (openWAAfter) {
-          sendWhatsAppReceipt('owner');
-        }
+      // 2. Open WhatsApp only if explicitly requested
+      if (openWAAfter) {
+        sendWhatsAppReceipt('owner');
       }
-    }, 10);
+
+      setIsGeneratingImage(false);
+    } catch (err) {
+      console.error('Error generating instant canvas image:', err);
+      setIsGeneratingImage(false);
+    }
   };
 
   const copyReceiptText = () => {
@@ -724,16 +715,23 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                       </span>
                     </div>
                     
-                    {financials.resident.phone && (
-                      <div className="flex items-center justify-between pt-1.5 border-t border-blue-100/60 text-xs">
-                        <div className="flex items-center gap-2">
-                          <Phone className="w-3.5 h-3.5 text-blue-900" />
-                          <span className="text-[10px] text-slate-500 font-bold">هاتف المالك:</span>
-                          <span className="font-black text-slate-800" dir="ltr">{financials.resident.phone}</span>
-                        </div>
+                    {(financials.resident.phone || financials.resident.tenantPhone) && (
+                      <div className="flex flex-col gap-1.5 pt-1.5 border-t border-blue-100/60 text-xs">
+                        {financials.resident.phone && (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-3.5 h-3.5 text-blue-900" />
+                              <span className="text-[10px] text-slate-500 font-bold">هاتف المالك:</span>
+                              <span className="font-black text-slate-800 tracking-wider" dir="ltr">{formatMobileNumber(financials.resident.phone)}</span>
+                            </div>
+                          </div>
+                        )}
                         {financials.resident.ownershipType === 'إيجار' && financials.resident.tenantName && (
-                          <div className="text-[10px] font-bold text-amber-900">
-                            المستأجر: <span className="font-black">{financials.resident.tenantName}</span>
+                          <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
+                            <div>المستأجر: <span className="font-black">{financials.resident.tenantName}</span></div>
+                            {financials.resident.tenantPhone && (
+                              <div className="font-black tracking-wider text-slate-800" dir="ltr">{formatMobileNumber(financials.resident.tenantPhone)}</div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -869,20 +867,22 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                           <span className="truncate">إرسال إشعار</span>
                         </button>
 
-                        {/* Button 2: Generate Image & Send */}
+                        {/* Button 2: Generate & Download Image Only */}
                         <button
                           type="button"
                           disabled={isGeneratingImage}
-                          onClick={() => handleCaptureAndShareImage(true)}
+                          onClick={() => handleCaptureAndShareImage(false)}
                           className="py-2 px-1 bg-blue-900 hover:bg-blue-950 text-white rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50 text-center active:scale-95"
-                          title="توليد صورة الإيصال وإرسالها برابط مباشر للواتساب المسجل"
+                          title={financials.currentMonthStatus === 'مسدد' ? 'توليد وتنزيل صورة الإيصال على جهازك' : 'توليد وتنزيل صورة إشعار المطالبة على جهازك'}
                         >
                           {isGeneratingImage ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-white" />
                           ) : (
                             <ImageIcon className="w-3.5 h-3.5 shrink-0 text-white" />
                           )}
-                          <span className="truncate">توليد صورة</span>
+                          <span className="truncate">
+                            {financials.currentMonthStatus === 'مسدد' ? 'توليد صورة إيصال' : 'توليد صورة مطالبة'}
+                          </span>
                         </button>
 
                         {/* Button 3: Copy Text */}

@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef } from 'react';
 import { Resident, Payment, Expense, UserRole, FloorConfig, AppConfig } from '../types';
 import { Calendar, Check, AlertCircle, RefreshCw, X, ExternalLink, Trash2, PlusCircle, CreditCard, Clock, Layers, Receipt, Edit, Save } from 'lucide-react';
 import { BuildingMap } from './BuildingMap';
-import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers } from '../utils/buildingStructure';
+import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
 
 interface SummariesProps {
   residents: Resident[];
@@ -151,7 +151,7 @@ export const Summaries: React.FC<SummariesProps> = ({
 
     effectiveFloorConfigs.forEach((floor) => {
       const unitNumbers = getUnitNumbersForFloor(floor, residents);
-      const floorResidents = sortedResidents.filter(r => unitNumbers.includes(r.flatNumber));
+      const floorResidents = sortedResidents.filter(r => unitNumbers.some(u => isSameFlatNumber(u, r.flatNumber)));
       floorResidents.forEach(r => assignedResidentIds.add(r.id));
       if (floorResidents.length > 0) {
         groups.push({ floor, residents: floorResidents });

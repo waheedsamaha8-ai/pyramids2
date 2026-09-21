@@ -16,6 +16,8 @@ import {
   JoinRequest
 } from '../types';
 import { fetchAllJoinRequests } from './authStore';
+import { formatMobileNumber } from '../utils/phoneUtils';
+import { isSameFlatNumber } from '../utils/buildingStructure';
 
 let currentAccessToken: string | null = null;
 let spreadsheetId: string | null = null;
@@ -91,6 +93,23 @@ export function parseSheetInt(val: any): number {
 export function parseSheetIntOptional(val: any): number | undefined {
   const num = parseSheetNumberOptional(val);
   return num !== undefined ? Math.round(num) : undefined;
+}
+
+export function parseFlatValue(val: any): number | string {
+  if (val === undefined || val === null) return '';
+  let str = String(val).trim();
+  if (!str) return '';
+  const standardDigits: Record<string, string> = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+  };
+  str = str.replace(/[٠-٩۰-۹]/g, (char) => standardDigits[char] || char);
+
+  // If purely numeric integer
+  if (/^\d+$/.test(str)) {
+    return parseInt(str, 10);
+  }
+  return str;
 }
 
 // Cache for read requests to save quota
@@ -533,13 +552,42 @@ async function seedInitialData() {
   await writeSheetRange('Events!A1', eventValues);
 }
 
+// Google Sheets cell limit safeguard: Google Sheets permits at most 50,000 characters per single cell.
+export const MAX_SHEET_CELL_CHARS = 45000;
+
+export function sanitizeSheetCell(val: any): string {
+  if (val === undefined || val === null) return '';
+  const str = typeof val === 'string' ? val : String(val);
+  
+  // If it's a raw base64 data URI (exceeds reasonable sheet cell length and shouldn't be stored in a cell)
+  if (str.startsWith('data:') && str.length > 500) {
+    return '[مرفق محلي - غير متزامن مع Drive]';
+  }
+  
+  // Hard limit: Google Sheets allows maximum 50,000 characters per cell
+  if (str.length > MAX_SHEET_CELL_CHARS) {
+    console.warn(`[Google Sheets] Truncating cell content from ${str.length} to ${MAX_SHEET_CELL_CHARS} chars to comply with Google limit.`);
+    return str.substring(0, MAX_SHEET_CELL_CHARS);
+  }
+  
+  return str;
+}
+
+export function sanitizeSheetValues(values: any[][]): string[][] {
+  if (!Array.isArray(values)) return [];
+  return values.map(row => 
+    Array.isArray(row) ? row.map(cell => sanitizeSheetCell(cell)) : []
+  );
+}
+
 // Low-level helper to write a range to a sheet
-async function writeSheetRange(range: string, values: string[][]) {
+async function writeSheetRange(range: string, values: (string | number | boolean)[][]) {
   if (!spreadsheetId) return;
+  const sanitizedValues = sanitizeSheetValues(values);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`;
   await apiFetch(url, {
     method: 'PUT',
-    body: JSON.stringify({ values }),
+    body: JSON.stringify({ values: sanitizedValues }),
   });
 }
 
@@ -553,12 +601,13 @@ async function clearSheetRange(range: string) {
 }
 
 // Low-level helper to append values to a sheet
-async function appendSheetRow(sheetName: string, values: string[][]) {
+async function appendSheetRow(sheetName: string, values: (string | number | boolean)[][]) {
   if (!spreadsheetId) return;
+  const sanitizedValues = sanitizeSheetValues(values);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A1:append?valueInputOption=USER_ENTERED`;
   await apiFetch(url, {
     method: 'POST',
-    body: JSON.stringify({ values }),
+    body: JSON.stringify({ values: sanitizedValues }),
   });
 }
 
@@ -648,6 +697,16 @@ export async function getAppConfig(): Promise<AppConfig> {
           config.adminResidentProfile = defaultAdminProfile;
         }
       }
+      if (key === 'assistantConfig') {
+        try {
+          const parsed = JSON.parse(value);
+          if (parsed && typeof parsed === 'object') {
+            config.assistantConfig = parsed;
+          }
+        } catch {
+          // ignore
+        }
+      }
     });
 
     if (!config.activityDefaultFees) {
@@ -675,6 +734,13 @@ export async function saveAppConfig(config: AppConfig) {
     'تجاري': 500,
   };
 
+  // Sync with backend /api/config
+  fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  }).catch(() => {});
+
   const values = [
     ['Key', 'Value'],
     ['expenseTypes', config.expenseTypes.join(',')],
@@ -687,6 +753,7 @@ export async function saveAppConfig(config: AppConfig) {
     ['buildingLayout', JSON.stringify(config.buildingLayout || [])],
     ['activityDefaultFees', JSON.stringify(config.activityDefaultFees || defaultActivityFees)],
     ['adminResidentProfile', JSON.stringify(config.adminResidentProfile || null)],
+    ['assistantConfig', JSON.stringify(config.assistantConfig || null)],
   ];
   await writeSheetRange('Config!A1', values);
 }
@@ -702,7 +769,7 @@ export async function getResidents(): Promise<Resident[]> {
   const rows = result.values || [];
   
   const data = rows.map((row: string[]) => {
-    const parsedFlat = parseSheetInt(row[1]);
+    const parsedFlat = parseFlatValue(row[1]);
     const parsedMonthlyFee = parseSheetNumberOptional(row[9]);
     const parsedInitialBalance = parseSheetNumber(row[10]);
     const rawNotes = row[5] || '';
@@ -713,15 +780,15 @@ export async function getResidents(): Promise<Resident[]> {
       flatNumber: parsedFlat,
       name: row[2],
       activityType: row[3] || 'سكني',
-      phone: row[4] || '',
+      phone: formatMobileNumber(row[4] || ''),
       notes: cleanNotes,
       ownershipType: row[6] || 'تمليك',
       tenantName: row[7] || '',
-      tenantPhone: row[8] || '',
+      tenantPhone: formatMobileNumber(row[8] || ''),
       monthlyFee: parsedMonthlyFee,
       initialBalance: parsedInitialBalance,
     };
-  }).filter((r: any) => r.id && r.flatNumber > 0);
+  }).filter((r: any) => r.id && r.flatNumber !== undefined && r.flatNumber !== null && String(r.flatNumber).trim() !== '' && String(r.flatNumber) !== '0');
   
   setInCache('residents', data);
   return data;
@@ -734,11 +801,11 @@ export async function addResidentSheet(resident: Resident): Promise<void> {
     resident.flatNumber.toString(),
     resident.name,
     resident.activityType,
-    resident.phone || '',
+    formatMobileNumber(resident.phone || ''),
     resident.notes || '',
     resident.ownershipType || 'تمليك',
     resident.tenantName || '',
-    resident.tenantPhone || '',
+    formatMobileNumber(resident.tenantPhone || ''),
     (resident.monthlyFee ?? '').toString(),
     (resident.initialBalance ?? 0).toString(),
   ];
@@ -759,11 +826,11 @@ export async function setAllResidentsSheet(residents: Resident[]): Promise<void>
       r.flatNumber.toString(),
       r.name,
       r.activityType,
-      r.phone || '',
+      formatMobileNumber(r.phone || ''),
       r.notes || '',
       r.ownershipType || 'تمليك',
       r.tenantName || '',
-      r.tenantPhone || '',
+      formatMobileNumber(r.tenantPhone || ''),
       (r.monthlyFee ?? '').toString(),
       (r.initialBalance ?? 0).toString(),
     ])
@@ -790,7 +857,7 @@ export async function editResidentSheet(resident: Resident): Promise<void> {
   // Update internal cache immediately
   if (cache.residents.data) {
     const list = cache.residents.data as Resident[];
-    const idx = list.findIndex(r => (r.id && resident.id && r.id.trim().toLowerCase() === resident.id.trim().toLowerCase()) || r.flatNumber === resident.flatNumber);
+    const idx = list.findIndex(r => (r.id && resident.id && r.id.trim().toLowerCase() === resident.id.trim().toLowerCase()) || isSameFlatNumber(r.flatNumber, resident.flatNumber));
     if (idx !== -1) {
       list[idx] = { ...list[idx], ...resident };
     } else {
@@ -807,7 +874,7 @@ export async function editResidentSheet(resident: Resident): Promise<void> {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Residents!A2:B2000`;
     const result = await apiFetch(url);
     const rows = result.values || [];
-    rawRowIdx = rows.findIndex((row: string[]) => row && parseSheetInt(row[1]) === resident.flatNumber);
+    rawRowIdx = rows.findIndex((row: string[]) => row && isSameFlatNumber(row[1], resident.flatNumber));
   }
 
   // Fallback 2: If still not found, append as a new resident to prevent error
@@ -864,7 +931,7 @@ export async function getPayments(): Promise<Payment[]> {
   
   const data = rows.map((row: string[]) => {
     const parsedYear = parseSheetInt(row[1]);
-    const parsedFlat = parseSheetInt(row[5] || '0');
+    const parsedFlat = parseFlatValue(row[5]);
     const parsedAmount = parseSheetNumber(row[7] || '0');
     return {
       id: row[0],
@@ -890,6 +957,7 @@ export async function getPayments(): Promise<Payment[]> {
 
 // Add Payment
 export async function addPaymentSheet(payment: Payment): Promise<void> {
+  const safeFileId = payment.fileId && payment.fileId.startsWith('data:') ? '' : (payment.fileId || '');
   const row = [
     payment.id,
     payment.year.toString(),
@@ -901,7 +969,7 @@ export async function addPaymentSheet(payment: Payment): Promise<void> {
     payment.amount.toString(),
     payment.receiptNumber || '',
     payment.notes || '',
-    payment.fileId || '',
+    safeFileId,
     payment.date || new Date().toISOString().split('T')[0],
     payment.isManuallyPaid ? 'TRUE' : 'FALSE',
   ];
@@ -915,6 +983,7 @@ export async function editPaymentSheet(payment: Payment): Promise<void> {
   const rawRowIdx = await findRowIndexById('Payments', payment.id);
   if (rawRowIdx === -1) throw new Error('لم يتم العثور على التحصيل.');
   
+  const safeFileId = payment.fileId && payment.fileId.startsWith('data:') ? '' : (payment.fileId || '');
   const sheetRowNumber = rawRowIdx + 2;
   const range = `Payments!A${sheetRowNumber}:M${sheetRowNumber}`;
   const values = [[
@@ -928,7 +997,7 @@ export async function editPaymentSheet(payment: Payment): Promise<void> {
     payment.amount.toString(),
     payment.receiptNumber || '',
     payment.notes || '',
-    payment.fileId || '',
+    safeFileId,
     payment.date,
     payment.isManuallyPaid ? 'TRUE' : 'FALSE',
   ]];
@@ -982,6 +1051,7 @@ export async function getExpenses(): Promise<Expense[]> {
 
 // Add Expense
 export async function addExpenseSheet(expense: Expense): Promise<void> {
+  const safeFileId = expense.fileId && expense.fileId.startsWith('data:') ? '' : (expense.fileId || '');
   const row = [
     expense.id,
     expense.year.toString(),
@@ -989,7 +1059,7 @@ export async function addExpenseSheet(expense: Expense): Promise<void> {
     expense.expenseType,
     expense.amount.toString(),
     expense.notes || '',
-    expense.fileId || '',
+    safeFileId,
     expense.date || new Date().toISOString().split('T')[0],
   ];
   await appendSheetRow('Expenses', [row]);
@@ -1002,6 +1072,7 @@ export async function editExpenseSheet(expense: Expense): Promise<void> {
   const rawRowIdx = await findRowIndexById('Expenses', expense.id);
   if (rawRowIdx === -1) throw new Error('لم يتم العثور على المصروف.');
   
+  const safeFileId = expense.fileId && expense.fileId.startsWith('data:') ? '' : (expense.fileId || '');
   const sheetRowNumber = rawRowIdx + 2;
   const range = `Expenses!A${sheetRowNumber}:H${sheetRowNumber}`;
   const values = [[
@@ -1011,7 +1082,7 @@ export async function editExpenseSheet(expense: Expense): Promise<void> {
     expense.expenseType,
     expense.amount.toString(),
     expense.notes || '',
-    expense.fileId || '',
+    safeFileId,
     expense.date,
   ]];
   await writeSheetRange(range, values);
@@ -1145,7 +1216,7 @@ export async function batchGetAllData(): Promise<{
   const eventRows = valueRanges[10]?.values || [];
   
   const residents = residentsRows.map((row: string[]) => {
-    const parsedFlat = parseSheetInt(row[1]);
+    const parsedFlat = parseFlatValue(row[1]);
     const parsedMonthlyFee = parseSheetNumberOptional(row[9]);
     const parsedInitialBalance = parseSheetNumber(row[10]);
     const rawNotes = row[5] || '';
@@ -1156,19 +1227,19 @@ export async function batchGetAllData(): Promise<{
       flatNumber: parsedFlat,
       name: row[2] || '',
       activityType: row[3] || 'سكني',
-      phone: row[4] || '',
+      phone: formatMobileNumber(row[4] || ''),
       notes: cleanNotes,
       ownershipType: row[6] || 'تمليك',
       tenantName: row[7] || '',
-      tenantPhone: row[8] || '',
+      tenantPhone: formatMobileNumber(row[8] || ''),
       monthlyFee: parsedMonthlyFee,
       initialBalance: parsedInitialBalance,
     };
-  }).filter((r: any) => r.id && r.flatNumber > 0);
+  }).filter((r: any) => r.id && r.flatNumber !== undefined && r.flatNumber !== null && String(r.flatNumber).trim() !== '' && String(r.flatNumber) !== '0');
 
   const payments = paymentsRows.map((row: string[]) => {
     const parsedYear = parseSheetInt(row[1]);
-    const parsedFlat = parseSheetInt(row[5] || '0');
+    const parsedFlat = parseFlatValue(row[5]);
     const parsedAmount = parseSheetNumber(row[7] || '0');
     return {
       id: row[0],
@@ -1220,7 +1291,7 @@ export async function batchGetAllData(): Promise<{
       id: row[0],
       name: row[1] || '',
       specialty: row[2] || '',
-      phone: row[3] || '',
+      phone: formatMobileNumber(row[3] || ''),
       notes: row[4] || '',
       addedBy: row[5] || '',
       comments,
@@ -1228,7 +1299,7 @@ export async function batchGetAllData(): Promise<{
   }).filter((c: any) => c.id && c.name);
 
   const messages: ChatMessage[] = chatRows.map((row: string[]) => {
-    const flatNum = parseSheetIntOptional(row[2]);
+    const flatNum = parseFlatValue(row[2]) || undefined;
     return {
       id: row[0],
       senderName: row[1] || '',
@@ -1280,7 +1351,7 @@ export async function batchGetAllData(): Promise<{
   }).filter((p: any) => p.id && p.title);
 
   const complaints: PublicComplaint[] = complaintRows.map((row: string[]) => {
-    const flatNum = parseSheetIntOptional(row[3]);
+    const flatNum = parseFlatValue(row[3]) || undefined;
     let comments = [];
     try {
       comments = row[8] ? JSON.parse(row[8]) : [];
@@ -1301,10 +1372,10 @@ export async function batchGetAllData(): Promise<{
   }).filter((c: any) => c.id && c.title);
 
   const maintenance: MaintenanceRequest[] = maintenanceRows.map((row: string[]) => {
-    const flatNum = parseSheetInt(row[1]);
+    const flatNum = parseFlatValue(row[1]);
     return {
       id: row[0],
-      flatNumber: isNaN(flatNum) ? 0 : flatNum,
+      flatNumber: flatNum,
       residentName: row[2] || '',
       title: row[3] || '',
       description: row[4] || '',
@@ -1662,13 +1733,9 @@ export async function addCraftsmanSheet(craftsman: Craftsman) {
   if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
   const commentsJson = craftsman.comments && craftsman.comments.length > 0 ? JSON.stringify(craftsman.comments) : '[]';
   const values = [
-    [craftsman.id, craftsman.name, craftsman.specialty, craftsman.phone, craftsman.notes || '', craftsman.addedBy, commentsJson]
+    [craftsman.id, craftsman.name, craftsman.specialty, formatMobileNumber(craftsman.phone), craftsman.notes || '', craftsman.addedBy, commentsJson]
   ];
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Craftsmen!A:G:append?valueInputOption=USER_ENTERED`;
-  await apiFetch(url, {
-    method: 'POST',
-    body: JSON.stringify({ values }),
-  });
+  await appendSheetRow('Craftsmen', values);
   cache.craftsmen.expiry = 0;
 }
 
@@ -1681,7 +1748,7 @@ export async function editCraftsmanSheet(craftsman: Craftsman) {
   const commentsJson = craftsman.comments && craftsman.comments.length > 0 ? JSON.stringify(craftsman.comments) : '[]';
   const range = `Craftsmen!A${rowIndex + 2}:G${rowIndex + 2}`;
   const values = [
-    [craftsman.id, craftsman.name, craftsman.specialty, craftsman.phone, craftsman.notes || '', craftsman.addedBy, commentsJson]
+    [craftsman.id, craftsman.name, craftsman.specialty, formatMobileNumber(craftsman.phone), craftsman.notes || '', craftsman.addedBy, commentsJson]
   ];
   await writeSheetRange(range, values);
   cache.craftsmen.expiry = 0;
@@ -1718,13 +1785,14 @@ export async function deleteCraftsmanSheet(id: string) {
 // ----------------------------------------------------
 export async function addChatMessageSheet(msg: ChatMessage): Promise<void> {
   if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const safeImageUrl = msg.imageUrl && msg.imageUrl.startsWith('data:') ? '' : (msg.imageUrl || '');
   const row = [
     msg.id,
     msg.senderName,
     msg.flatNumber !== undefined ? msg.flatNumber.toString() : '',
     msg.text || '',
     msg.timestamp,
-    msg.imageUrl || '',
+    safeImageUrl,
   ];
   await appendSheetRow('ChatMessages', [row]);
   cache.messages.expiry = 0;
@@ -1740,7 +1808,7 @@ export async function setAllChatMessagesSheet(messages: ChatMessage[]): Promise<
       m.flatNumber !== undefined ? m.flatNumber.toString() : '',
       m.text || '',
       m.timestamp,
-      m.imageUrl || '',
+      m.imageUrl && m.imageUrl.startsWith('data:') ? '' : (m.imageUrl || ''),
     ])
   ];
   await writeSheetRange('ChatMessages!A1', values);
@@ -1896,6 +1964,7 @@ export async function setAllPollsSheet(polls: Poll[]): Promise<void> {
 // ----------------------------------------------------
 export async function addComplaintSheet(complaint: PublicComplaint): Promise<void> {
   if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
+  const safeImageUrl = complaint.imageUrl && complaint.imageUrl.startsWith('data:') ? '' : (complaint.imageUrl || '');
   const row = [
     complaint.id,
     complaint.title,
@@ -1903,7 +1972,7 @@ export async function addComplaintSheet(complaint: PublicComplaint): Promise<voi
     complaint.flatNumber !== undefined ? complaint.flatNumber.toString() : '',
     complaint.residentName,
     complaint.isAnonymous ? 'TRUE' : 'FALSE',
-    complaint.imageUrl || '',
+    safeImageUrl,
     complaint.date,
     JSON.stringify(complaint.comments || []),
   ];
@@ -1917,6 +1986,7 @@ export async function editComplaintSheet(complaint: PublicComplaint): Promise<vo
   const rowIndex = all.findIndex(c => c.id === complaint.id);
   if (rowIndex === -1) throw new Error('لم يتم العثور على الشكوى.');
 
+  const safeImageUrl = complaint.imageUrl && complaint.imageUrl.startsWith('data:') ? '' : (complaint.imageUrl || '');
   const range = `Complaints!A${rowIndex + 2}:I${rowIndex + 2}`;
   const values = [[
     complaint.id,
@@ -1925,7 +1995,7 @@ export async function editComplaintSheet(complaint: PublicComplaint): Promise<vo
     complaint.flatNumber !== undefined ? complaint.flatNumber.toString() : '',
     complaint.residentName,
     complaint.isAnonymous ? 'TRUE' : 'FALSE',
-    complaint.imageUrl || '',
+    safeImageUrl,
     complaint.date,
     JSON.stringify(complaint.comments || []),
   ]];
@@ -1954,7 +2024,7 @@ export async function setAllComplaintsSheet(complaints: PublicComplaint[]): Prom
       c.flatNumber !== undefined ? c.flatNumber.toString() : '',
       c.residentName,
       c.isAnonymous ? 'TRUE' : 'FALSE',
-      c.imageUrl || '',
+      c.imageUrl && c.imageUrl.startsWith('data:') ? '' : (c.imageUrl || ''),
       c.date,
       JSON.stringify(c.comments || []),
     ])
@@ -2181,9 +2251,9 @@ export async function getJoinRequests(): Promise<JoinRequest[]> {
     flatNumber: parseSheetInt(row[1]) || 0,
     residentType: (row[2] || 'OWNER') as 'OWNER' | 'TENANT',
     ownerName: row[3] || '',
-    ownerPhone: row[4] || '',
+    ownerPhone: formatMobileNumber(row[4] || ''),
     tenantName: row[5] || '',
-    tenantPhone: row[6] || '',
+    tenantPhone: formatMobileNumber(row[6] || ''),
     email: (row[7] || '').toLowerCase().trim(),
     password: row[8] || '',
     status: (row[9] || 'PENDING') as 'PENDING' | 'APPROVED' | 'DECLINED',
@@ -2198,9 +2268,9 @@ export async function addJoinRequest(req: JoinRequest): Promise<void> {
     req.flatNumber.toString(),
     req.residentType,
     req.ownerName,
-    req.ownerPhone,
+    formatMobileNumber(req.ownerPhone),
     req.tenantName,
-    req.tenantPhone,
+    formatMobileNumber(req.tenantPhone),
     req.email.toLowerCase().trim(),
     req.password || '',
     req.status,
