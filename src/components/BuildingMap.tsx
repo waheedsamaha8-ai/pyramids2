@@ -396,6 +396,12 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     drawRow('اسم الشاغل / الساكن:', financials.resident.name);
     drawRow('رقم الوحدة ونشاطها:', `شقة ${financials.resident.flatNumber} (${financials.resident.activityType})`);
     drawRow('عن شهر الاشتراكات:', `اشتراك ${monthName} ${currentYear} (${financials.monthlyFee} ج.م)`);
+    if (isPaid) {
+      const collectionTypeVal = (financials.currentMonthPayment as any)?.category || (financials.currentMonthPayment as any)?.collectionType || financials.currentMonthPayment?.paymentType || 'اشتراك شهري';
+      const paymentMethodVal = (financials.currentMonthPayment as any)?.paymentMethod || 'سداد نقدي';
+      drawRow('نوع التحصيل:', collectionTypeVal);
+      drawRow('طريقة السداد:', paymentMethodVal);
+    }
 
     // Old Debt / Balance Notice
     if (oldDebtVal > 0) {
@@ -789,7 +795,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                         </div>
                       </div>
                       <span className="text-[9.5px] font-black px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-900 border border-blue-200">
-                        {financials.resident.activityType} - {financials.resident.ownershipType}
+                        {((financials.resident.tenantName || financials.resident.ownershipType === 'إيجار') ? 'إيجار' : (financials.resident.ownershipType || 'تمليك'))} / {financials.resident.activityType || 'سكني'}
                       </span>
                     </div>
                     
@@ -1327,21 +1333,29 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                 </td>
                 <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>نوع الإشغال:</td>
                 <td style={{ padding: '9px 12px', fontWeight: '800', color: '#334155' }}>
-                  {financials.resident.ownershipType || 'تمليك'}
+                  {((financials.resident.tenantName || financials.resident.ownershipType === 'إيجار') ? 'إيجار' : (financials.resident.ownershipType || 'تمليك'))} / {financials.resident.activityType || 'سكني'}
                   {financials.resident.tenantName ? ` (مستأجر: ${financials.resident.tenantName})` : ''}
                 </td>
               </tr>
               {financials.currentMonthStatus === 'مسدد' && (
-                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>تاريخ السداد:</td>
-                  <td style={{ padding: '9px 12px', fontWeight: '800', color: '#0f172a' }}>
-                    {financials.currentMonthPayment?.date || new Date().toISOString().slice(0, 10)}
-                  </td>
-                  <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>طريقة التحصيل:</td>
-                  <td style={{ padding: '9px 12px', fontWeight: '800', color: '#047857' }}>
-                    {financials.currentMonthPayment?.paymentType || 'سداد نقدي معتمد'}
-                  </td>
-                </tr>
+                <>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>تاريخ السداد:</td>
+                    <td style={{ padding: '9px 12px', fontWeight: '800', color: '#0f172a' }}>
+                      {financials.currentMonthPayment?.date || new Date().toISOString().slice(0, 10)}
+                    </td>
+                    <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>نوع التحصيل:</td>
+                    <td style={{ padding: '9px 12px', fontWeight: '800', color: '#047857' }}>
+                      {(financials.currentMonthPayment as any)?.category || (financials.currentMonthPayment as any)?.collectionType || financials.currentMonthPayment?.paymentType || 'اشتراك شهري'}
+                    </td>
+                  </tr>
+                  <tr style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>طريقة السداد:</td>
+                    <td colSpan={3} style={{ padding: '9px 12px', fontWeight: '800', color: '#047857' }}>
+                      {(financials.currentMonthPayment as any)?.paymentMethod || 'سداد نقدي'}
+                    </td>
+                  </tr>
+                </>
               )}
             </tbody>
           </table>

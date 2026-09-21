@@ -170,19 +170,30 @@ export async function generateElementImageBlob(
           wrapper.appendChild(clonedTarget);
           clonedDoc.body.appendChild(wrapper);
 
-          // 5. Optimize <style> tags in clonedDoc.head: prune massive Tailwind CSS blocks to make html2canvas parse 10x faster
+          // 5. Remove external stylesheet link tags and prune non-font <style> blocks from clonedDoc.head
+          // This prevents html2canvas from making slow network requests or parsing thousands of CSS classes.
+          const linkTags = Array.from(clonedDoc.head.querySelectorAll('link'));
+          linkTags.forEach((link) => {
+            const href = link.getAttribute('href') || '';
+            if (!href.includes('fonts.googleapis.com') && !href.includes('fonts.gstatic.com')) {
+              link.remove();
+            }
+          });
+
           const styleTags = Array.from(clonedDoc.head.querySelectorAll('style'));
           styleTags.forEach((styleTag) => {
             const cssContent = styleTag.textContent || '';
-            if (cssContent.length > 20000) {
-              const fontRules = cssContent.match(/@font-face\s*\{[^}]+\}/gi);
-              styleTag.textContent = fontRules ? fontRules.join('\n') : '';
+            const fontRules = cssContent.match(/@font-face\s*\{[^}]+\}/gi);
+            if (fontRules && fontRules.length > 0) {
+              styleTag.textContent = fontRules.join('\n');
+            } else if (cssContent.length > 5000) {
+              styleTag.remove();
             } else if (/(oklch|oklab|lab|lch|hwb|color)\(/i.test(cssContent)) {
               styleTag.textContent = sanitizeStyleText(cssContent);
             }
           });
 
-          // 6. Sanitize inline styles ONLY on the cloned target element and its immediate descendants
+          // 6. Sanitize inline styles ONLY on target nodes that contain modern color functions
           const targetNodes = [clonedTarget, ...Array.from(clonedTarget.querySelectorAll('*'))] as HTMLElement[];
           targetNodes.forEach((node) => {
             const styleAttr = node.getAttribute('style');
@@ -191,7 +202,7 @@ export async function generateElementImageBlob(
             }
           });
 
-          // 7. Sanitize computed color properties ONLY for target printable nodes
+          // 7. Sanitize computed color properties ONLY for target nodes that need it
           const origElem = document.getElementById(elementId);
           if (origElem) {
             const origNodes = [origElem, ...Array.from(origElem.querySelectorAll('*'))] as HTMLElement[];
@@ -203,26 +214,29 @@ export async function generateElementImageBlob(
               'borderRightColor',
               'borderBottomColor',
               'borderLeftColor',
-              'outlineColor',
-              'fill',
-              'stroke',
             ];
 
-            for (let i = 0; i < Math.min(origNodes.length, targetNodes.length); i++) {
+            const nodeCount = Math.min(origNodes.length, targetNodes.length);
+            for (let i = 0; i < nodeCount; i++) {
               const origNode = origNodes[i];
               const clonedNode = targetNodes[i];
               if (!origNode || !clonedNode) continue;
 
-              try {
-                const computed = window.getComputedStyle(origNode);
-                colorProps.forEach((prop) => {
-                  const val = (computed as any)[prop];
-                  if (val && typeof val === 'string' && /(oklch|oklab|lab|lch|hwb|color)\(/i.test(val)) {
-                    (clonedNode.style as any)[prop] = parseCssColorToRgb(val);
+              const styleAttr = origNode.getAttribute('style') || '';
+              // Only query computed style if inline style or node may have modern color function
+              if (styleAttr.includes('var(') || styleAttr.includes('oklch') || styleAttr.includes('oklab') || !styleAttr) {
+                try {
+                  const computed = window.getComputedStyle(origNode);
+                  for (let p = 0; p < colorProps.length; p++) {
+                    const prop = colorProps[p];
+                    const val = (computed as any)[prop];
+                    if (val && typeof val === 'string' && /(oklch|oklab|lab|lch|hwb|color)\(/i.test(val)) {
+                      (clonedNode.style as any)[prop] = parseCssColorToRgb(val);
+                    }
                   }
-                });
-              } catch (e) {
-                // Ignore node style lookup errors
+                } catch (e) {
+                  // Ignore node style lookup errors
+                }
               }
             }
           }
