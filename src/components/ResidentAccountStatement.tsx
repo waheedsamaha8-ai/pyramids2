@@ -406,7 +406,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               </div>
               <div>
                 <span className="text-xs font-black text-slate-800 block">اختر رقم الوحدة واسم الساكن لعرض كشف الحساب:</span>
-                <span className="text-[10px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها ومشاركتها</span>
+                <span className="text-[7px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها ومشاركتها</span>
               </div>
             </div>
             
@@ -456,7 +456,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                 </span>
               )}
             </h2>
-            <p className="text-[11px] text-slate-400 font-semibold">
+            <p className="text-[10px] text-slate-400 font-semibold">
               تاريخ بدء المحاسبة المعتمد: <span className="font-bold text-slate-600">{accountingStartDate}</span> | التقرير محدث حتى تاريخ اليوم
             </p>
           </div>

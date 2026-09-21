@@ -3117,7 +3117,7 @@ export default function App() {
                       <span className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-indigo-600 transition block">
                         دردشة السكان
                       </span>
-                      <span className="text-[9px] leading-[15px] text-slate-400 font-bold block">
+                      <span className="text-[8px] leading-[15px] text-slate-400 font-bold block">
                         غرفة النقاش والمحادثات المباشرة بين سكان وملاك العمارة
                       </span>
                     </div>
