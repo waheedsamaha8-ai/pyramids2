@@ -2671,57 +2671,51 @@ export default function App() {
                       >
                         المصروفات والفواتير
                       </button>
-                      {role !== 'ASSISTANT' && (
-                        <>
-                          <button
-                            onClick={() => { setActiveTab('debts-report'); setMenuOpen(false); }}
-                            className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'debts-report' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            كشف المديونيات
-                          </button>
-                          <button
-                            onClick={() => { setActiveTab('summaries'); setMenuOpen(false); }}
-                            className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'summaries' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            الملخصات وخريطة السداد
-                          </button>
-                          <button
-                            onClick={() => { setActiveTab('history'); setMenuOpen(false); }}
-                            className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'history' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            سجل المعاملات المالية
-                          </button>
-                        </>
-                      )}
+                      <button
+                        onClick={() => { setActiveTab('debts-report'); setMenuOpen(false); }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'debts-report' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        كشف المديونيات
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('summaries'); setMenuOpen(false); }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'summaries' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        الملخصات وخريطة السداد
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('history'); setMenuOpen(false); }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'history' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        سجل المعاملات المالية
+                      </button>
                     </div>
                   )}
                 </div>
 
                 {/* 3. Residents Category */}
-                {role !== 'ASSISTANT' && (
-                  <div className="space-y-1">
-                    <button 
-                      onClick={() => toggleSection('residents')}
-                      className="w-full flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl text-xs font-black text-blue-950 transition cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-blue-600" />
-                        <span>قسم الوحدات والسكان</span>
-                      </div>
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedSections.includes('residents') ? '' : '-rotate-90'}`} />
-                    </button>
-                    {expandedSections.includes('residents') && (
-                      <div className="pr-3 flex flex-col gap-1 mt-1 border-r-2 border-blue-200 mr-2">
-                        <button
-                          onClick={() => { setActiveTab('residents'); setMenuOpen(false); }}
-                          className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'residents' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          كشف الوحدات وهيكل العمارة
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div className="space-y-1">
+                  <button 
+                    onClick={() => toggleSection('residents')}
+                    className="w-full flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl text-xs font-black text-blue-950 transition cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      <span>قسم الوحدات والسكان</span>
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedSections.includes('residents') ? '' : '-rotate-90'}`} />
+                  </button>
+                  {expandedSections.includes('residents') && (
+                    <div className="pr-3 flex flex-col gap-1 mt-1 border-r-2 border-blue-200 mr-2">
+                      <button
+                        onClick={() => { setActiveTab('residents'); setMenuOpen(false); }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'residents' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        كشف الوحدات وهيكل العمارة
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* 4. Services & Communication Category */}
                 <div className="space-y-1">

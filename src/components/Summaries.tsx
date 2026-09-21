@@ -498,7 +498,7 @@ export const Summaries: React.FC<SummariesProps> = ({
             <RefreshCw className="w-3.5 h-3.5 text-blue-900" />
             <span>
               {role === 'ASSISTANT'
-                ? '* عرض كشف التحصيل الشهري (وضع القراءة فقط للمساعد الفني)'
+                ? '* انقر على أي خانة لعرض التفاصيل وتوليد الإيصالات والإشعارات'
                 : '* انقر على أي خانة لعرض تفاصيل وكشف المتحصلات المجمعة لهذا الشهر'}
             </span>
           </div>
@@ -585,7 +585,6 @@ export const Summaries: React.FC<SummariesProps> = ({
                             <td
                               key={m}
                               onClick={() => {
-                                if (role === 'ASSISTANT') return;
                                 const monthName = monthNamesArabic[idx];
                                 const defaultAmt = getDefaultFeeForResident(res);
                                 setNewAmount(String(defaultAmt));
@@ -601,9 +600,7 @@ export const Summaries: React.FC<SummariesProps> = ({
                               }}
                               className={`px-1 py-1 text-center border-x border-slate-50 ${
                                 isQuarterEnd ? 'border-l-2 border-l-slate-200' : ''
-                              } ${
-                                role === 'ASSISTANT' ? 'cursor-default' : 'cursor-pointer'
-                              } ${
+                              } cursor-pointer ${
                                 status.paid
                                   ? 'bg-emerald-50/40 text-emerald-700 hover:bg-emerald-100/50'
                                   : 'bg-red-50/40 text-red-600 hover:bg-red-100/50'
@@ -808,7 +805,7 @@ export const Summaries: React.FC<SummariesProps> = ({
                                   </a>
                                 )}
 
-                                {!isReadOnly && (
+                                 {!isReadOnly && role !== 'ASSISTANT' && (
                                   <>
                                     <button
                                       onClick={() => {
@@ -873,7 +870,7 @@ export const Summaries: React.FC<SummariesProps> = ({
             </div>
 
             {/* Quick Payment Input Form (Amount next to Payment Type next to Submit Button) */}
-            {!isReadOnly && (
+            {!isReadOnly && role !== 'ASSISTANT' && (
               <div className="px-3 py-2 bg-emerald-50/50 border-t border-slate-100 space-y-1.5 shrink-0">
                 <div className="flex items-center justify-between">
                   <h4 className="text-[10.5px] font-black text-emerald-950 flex items-center gap-1">
