@@ -525,7 +525,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               </div>
               <div>
                 <span className="text-xs font-black text-slate-800 block">اختر رقم الوحدة واسم الساكن لعرض كشف الحساب:</span>
-                <span className="text-[7px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها ومشاركتها</span>
+                <span className="text-[8px] text-slate-400 font-bold">يمكنك اختيار أي وحدة لعرض كامل تفاصيل اشتراكاتها ومدفوعاتها ومشاركتها</span>
               </div>
             </div>
             
