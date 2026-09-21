@@ -25,7 +25,7 @@ import {
   Check
 } from 'lucide-react';
 import { CommunityHeader, CommunityCounts, CommunityServiceId } from './CommunityHeader';
-import { formatMobileNumber, normalizePhoneInput, toWhatsAppNumber } from '../utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay, normalizePhoneInput, toWhatsAppNumber } from '../utils/phoneUtils';
 
 interface MaintenanceRequestsProps {
   requests: MaintenanceRequest[];
@@ -853,9 +853,16 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
                           </div>
                           <div>
                             <h5 className="text-sm font-black text-slate-900 dark:text-slate-100">{c.name}</h5>
-                            <span className="text-[10px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded-md font-black mt-0.5 inline-block">
-                              {c.specialty}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="text-[10px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded-md font-black inline-block">
+                                {c.specialty}
+                              </span>
+                              {c.phone && (
+                                <span className="text-[10px] text-slate-600 dark:text-slate-300 font-mono font-bold phone-number-display" dir="ltr">
+                                  {formatPhoneForDisplay(c.phone)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 

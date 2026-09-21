@@ -15,7 +15,7 @@ import {
   getResidentMonthlyFee, 
   exportCarriedBalancesForYear 
 } from '../utils/financialCalculations';
-import { formatMobileNumber, normalizePhoneInput } from '../utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay, normalizePhoneInput } from '../utils/phoneUtils';
 
 export { 
   calculateResidentFinancials, 
@@ -859,14 +859,15 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                           </div>
 
                           {res.phone && (
-                            <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold" dir="ltr">
+                            <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold phone-number-display" dir="ltr">
                               <a
                                 href={`tel:${formatMobileNumber(res.phone)}`}
-                                className="inline-flex items-center gap-1.5 text-blue-900 hover:text-blue-700 hover:underline font-bold font-mono transition px-2 py-1 bg-blue-50/70 hover:bg-blue-100/70 rounded-lg"
+                                className="inline-flex items-center gap-1.5 text-blue-900 hover:text-blue-700 hover:underline font-bold font-mono transition px-2 py-1 bg-blue-50/70 hover:bg-blue-100/70 rounded-lg phone-number-display"
                                 title={`اتصال هاتفي بالمالك ${res.name}: ${formatMobileNumber(res.phone)}`}
+                                dir="ltr"
                               >
                                 <Phone className="w-3 h-3 text-blue-900 shrink-0" />
-                                <span>{formatMobileNumber(res.phone)}</span>
+                                <span dir="ltr">{formatPhoneForDisplay(res.phone)}</span>
                               </a>
                             </div>
                           )}
@@ -881,14 +882,15 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                                 </span>
                               </div>
                               {res.tenantPhone && (
-                                <div className="text-[10px] font-bold text-slate-600 flex items-center gap-1" dir="ltr">
+                                <div className="text-[10px] font-bold text-slate-600 flex items-center gap-1 phone-number-display" dir="ltr">
                                   <a
                                     href={`tel:${formatMobileNumber(res.tenantPhone)}`}
-                                    className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-950 hover:underline font-bold transition px-1.5 py-0.5 bg-amber-100/60 hover:bg-amber-200/60 rounded-md"
+                                    className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-950 hover:underline font-bold font-mono transition px-1.5 py-0.5 bg-amber-100/60 hover:bg-amber-200/60 rounded-md phone-number-display"
                                     title={`اتصال هاتفي بالمستأجر ${res.tenantName}: ${formatMobileNumber(res.tenantPhone)}`}
+                                    dir="ltr"
                                   >
                                     <Phone className="w-2.5 h-2.5 text-amber-700 shrink-0" />
-                                    <span>{formatMobileNumber(res.tenantPhone)}</span>
+                                    <span dir="ltr">{formatPhoneForDisplay(res.tenantPhone)}</span>
                                   </a>
                                 </div>
                               )}
@@ -1077,11 +1079,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                                 <a
                                   href={`tel:${formatMobileNumber(res.phone)}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 hover:underline font-bold transition px-1.5 py-0.5 rounded-md hover:bg-blue-50"
+                                  className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 hover:underline font-bold font-mono transition px-1.5 py-0.5 rounded-md hover:bg-blue-50 phone-number-display"
                                   title={`اتصال هاتفياً بالمالك ${res.name}: ${formatMobileNumber(res.phone)}`}
+                                  dir="ltr"
                                 >
                                   <Phone className="w-3 h-3 text-blue-900 shrink-0" />
-                                  <span>{formatMobileNumber(res.phone)}</span>
+                                  <span dir="ltr">{formatPhoneForDisplay(res.phone)}</span>
                                 </a>
                               ) : (
                                 <span className="text-slate-300 font-normal">—</span>
@@ -1103,11 +1106,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                                 <a
                                   href={`tel:${formatMobileNumber(res.tenantPhone)}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-950 hover:underline font-bold transition px-1.5 py-0.5 rounded-md hover:bg-amber-50"
+                                  className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-950 hover:underline font-bold font-mono transition px-1.5 py-0.5 rounded-md hover:bg-amber-50 phone-number-display"
                                   title={`اتصال هاتفياً بالمستأجر ${res.tenantName}: ${formatMobileNumber(res.tenantPhone)}`}
+                                  dir="ltr"
                                 >
                                   <Phone className="w-3 h-3 text-amber-800 shrink-0" />
-                                  <span>{formatMobileNumber(res.tenantPhone)}</span>
+                                  <span dir="ltr">{formatPhoneForDisplay(res.tenantPhone)}</span>
                                 </a>
                               ) : (
                                 <span className="text-slate-300 font-normal">—</span>
@@ -1491,9 +1495,9 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                       <td className="p-3.5 text-slate-800">
                         <div>{req.ownerName}</div>
                         {req.ownerPhone && (
-                          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 phone-number-display" dir="ltr">
                             <Phone className="w-3 h-3 shrink-0" />
-                            <span dir="ltr">{formatMobileNumber(req.ownerPhone)}</span>
+                            <span dir="ltr" className="font-mono">{formatPhoneForDisplay(req.ownerPhone)}</span>
                           </div>
                         )}
                       </td>
@@ -1502,9 +1506,9 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                           <>
                             <div>{req.tenantName}</div>
                             {req.tenantPhone && (
-                              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 phone-number-display" dir="ltr">
                                 <Phone className="w-3 h-3 shrink-0" />
-                                <span dir="ltr">{formatMobileNumber(req.tenantPhone)}</span>
+                                <span dir="ltr" className="font-mono">{formatPhoneForDisplay(req.tenantPhone)}</span>
                               </div>
                             )}
                           </>

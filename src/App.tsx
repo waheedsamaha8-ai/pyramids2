@@ -84,7 +84,7 @@ import { DebtsReport } from './components/DebtsReport';
 import { ResidentAccountStatement } from './components/ResidentAccountStatement';
 import { calculateResidentFinancials } from './utils/financialCalculations';
 import { removeUnitFromBuildingLayout, addUnitToBuildingLayout, compareFlatNumbers, isSameFlatNumber, parseFlatNumber, getUnitNumbersForFloor, deriveFloorConfigsFromResidents } from './utils/buildingStructure';
-import { formatMobileNumber } from './utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay } from './utils/phoneUtils';
 
 // Synchronous session and state hydration helpers for instant refresh
 const getInitialSavedSession = (): User | null => {
@@ -3917,7 +3917,7 @@ export default function App() {
                         </div>
                         <div className="text-xs font-bold text-slate-700 truncate">{r.name}</div>
                         {r.phone && (
-                          <div className="text-[10px] text-slate-400 font-medium dir-ltr text-right tracking-wider">{formatMobileNumber(r.phone)}</div>
+                          <div className="text-[10px] text-slate-500 font-medium font-mono phone-number-display" dir="ltr">{formatPhoneForDisplay(r.phone)}</div>
                         )}
                       </div>
                     ))}

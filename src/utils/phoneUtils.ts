@@ -48,6 +48,19 @@ export function formatMobileNumber(phone: string | number | null | undefined): s
   // Remove leading Excel/Sheets text apostrophe if present: ' +966... or '+966...
   str = str.replace(/^['"]+/, '').trim();
 
+  // Handle scientific notation e.g. "9.66539E+11" or "9.66539313467e+11" from Excel/Sheets
+  if (/[eE][+-]?\d+/.test(str)) {
+    const num = Number(str.replace(/,/g, ''));
+    if (!isNaN(num) && isFinite(num)) {
+      str = BigInt(Math.round(num)).toString();
+    }
+  }
+
+  // Remove trailing decimal zeroes like "966539313467.0" from Excel float parsing
+  if (/\.\d+$/.test(str)) {
+    str = str.replace(/\.0+$/, '').replace(/\.\d+$/, '');
+  }
+
   // 1. Convert Arabic-Indic (٠-٩) and Persian (۰-۹) numerals to Western digits (0-9)
   str = str
     .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
@@ -91,6 +104,17 @@ export function formatMobileNumber(phone: string | number | null | undefined): s
   // Egyptian 10-digit number missing leading zero (e.g. 1007911777):
   if (allDigits.length === 10 && allDigits.startsWith('1')) {
     return '0' + allDigits;
+  }
+
+  // Saudi local mobile number (10 digits starting with 05, e.g. 0539313467):
+  // Convert directly to international format: +966539313467
+  if (allDigits.startsWith('05') && allDigits.length === 10) {
+    return '+966' + allDigits.substring(1);
+  }
+
+  // Kuwait local mobile numbers (8 digits starting with 5, 6, or 9)
+  if ((allDigits.startsWith('5') || allDigits.startsWith('6') || allDigits.startsWith('9')) && allDigits.length === 8) {
+    return '+965' + allDigits;
   }
 
   // 6. Check if it starts with an international country code without '+'
@@ -200,6 +224,21 @@ export function formatPhoneForText(phone: string | number | null | undefined): s
   if (!formatted) return '';
   if (formatted.startsWith('+')) {
     return '\u200E' + formatted;
+  }
+  return formatted;
+}
+
+/**
+ * Formats a phone number for visual display in RTL Arabic user interfaces.
+ * Wraps the formatted number with Left-to-Right Embedding (\u202A) and Pop Directional Formatting (\u202C)
+ * so that '+' always visually stays on the extreme left in both mobile and desktop browsers,
+ * regardless of parent RTL context or font rendering quirks.
+ */
+export function formatPhoneForDisplay(phone: string | number | null | undefined): string {
+  const formatted = formatMobileNumber(phone);
+  if (!formatted) return '';
+  if (formatted.startsWith('+')) {
+    return '\u202A' + formatted + '\u202C';
   }
   return formatted;
 }

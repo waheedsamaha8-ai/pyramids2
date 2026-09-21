@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
-import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay, toWhatsAppNumber } from '../utils/phoneUtils';
 import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
 import { generateElementImageBlob } from '../utils/imageExport';
 
@@ -810,7 +810,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                             <div className="flex items-center gap-2">
                               <Phone className="w-3.5 h-3.5 text-blue-900" />
                               <span className="text-[10px] text-slate-500 font-bold">هاتف المالك:</span>
-                              <span className="font-black text-slate-800 tracking-wider font-mono inline-block" dir="ltr">{formatMobileNumber(financials.resident.phone)}</span>
+                              <span className="font-black text-slate-800 tracking-wider font-mono inline-block phone-number-display" dir="ltr">{formatPhoneForDisplay(financials.resident.phone)}</span>
                             </div>
                           </div>
                         )}
@@ -818,7 +818,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                           <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
                             <div>المستأجر: <span className="font-black">{financials.resident.tenantName}</span></div>
                             {financials.resident.tenantPhone && (
-                              <div className="font-black tracking-wider text-slate-800 font-mono inline-block" dir="ltr">{formatMobileNumber(financials.resident.tenantPhone)}</div>
+                              <div className="font-black tracking-wider text-slate-800 font-mono inline-block phone-number-display" dir="ltr">{formatPhoneForDisplay(financials.resident.tenantPhone)}</div>
                             )}
                           </div>
                         )}
@@ -1308,8 +1308,8 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                 <td style={{ padding: '9px 12px', fontWeight: '900', color: '#0f172a' }}>
                   <span>{financials.resident.name}</span>
                   {financials.resident.phone && (
-                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: '700', marginRight: '6px', fontFamily: 'monospace' }} dir="ltr">
-                      ({formatMobileNumber(financials.resident.phone)})
+                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: '700', marginRight: '6px', fontFamily: 'monospace' }} className="phone-number-display" dir="ltr">
+                      ({formatPhoneForDisplay(financials.resident.phone)})
                     </span>
                   )}
                 </td>

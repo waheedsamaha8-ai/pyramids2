@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Resident } from '../types';
 import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
-import { formatMobileNumber, normalizePhoneInput, toWhatsAppNumber } from '../utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay, normalizePhoneInput, toWhatsAppNumber } from '../utils/phoneUtils';
 import { 
   X, 
   Share2, 
@@ -263,7 +263,7 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
                     <option value="">-- اختر الوحدة المرتبطة لإرسال التقرير إليها --</option>
                     {residents.map(r => (
                       <option key={r.id} value={r.id}>
-                        شقة {r.flatNumber} - {r.name} {r.phone ? `(${r.phone})` : '(بدون هاتف)'}
+                        شقة {r.flatNumber} - {r.name} {r.phone ? `(${formatMobileNumber(r.phone)})` : '(بدون هاتف)'}
                       </option>
                     ))}
                   </select>
@@ -272,8 +272,10 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
                 {activeResident ? (
                   <div className="p-2.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs">
                     <span className="text-slate-600 font-bold">الرقم المسجل للوحدة:</span>
-                    <span className="font-mono font-black text-emerald-800" dir="ltr">
-                      {activeResident.phone || activeResident.tenantPhone || 'غير مسجل رقم هاتف'}
+                    <span className="font-mono font-black text-emerald-800 phone-number-display" dir="ltr">
+                      {activeResident.phone || activeResident.tenantPhone 
+                        ? formatPhoneForDisplay(activeResident.phone || activeResident.tenantPhone) 
+                        : 'غير مسجل رقم هاتف'}
                     </span>
                   </div>
                 ) : (

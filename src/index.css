@@ -668,4 +668,15 @@ html.dark body {
   }
 }
 
+/* Phone number LTR display helper for Arabic RTL interfaces (mobile and desktop) */
+.phone-number-display {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  text-align: left !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+
 

@@ -7,7 +7,7 @@ import {
   getCarriedPreviousBalance, 
   exportCarriedBalancesForYear 
 } from '../utils/financialCalculations';
-import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay, formatPhoneForText, toWhatsAppNumber } from '../utils/phoneUtils';
 import { 
   TrendingDown, 
   Search, 
@@ -411,10 +411,10 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
     residentsWithDebt.forEach((item, index) => {
       const debtAmount = Math.round(Math.abs(item.financials.netBalance));
       text += `${index + 1}. *وحدة ${item.resident.flatNumber}* - المالك: ${item.resident.name}`;
-      if (item.resident.phone) text += ` (${formatMobileNumber(item.resident.phone)})`;
+      if (item.resident.phone) text += ` (${formatPhoneForText(item.resident.phone)})`;
       if (item.resident.ownershipType === 'إيجار' && item.resident.tenantName) {
         text += `\n   المستأجر: ${item.resident.tenantName}`;
-        if (item.resident.tenantPhone) text += ` (${formatMobileNumber(item.resident.tenantPhone)})`;
+        if (item.resident.tenantPhone) text += ` (${formatPhoneForText(item.resident.tenantPhone)})`;
       }
       text += `\n   • صافي المديونية: *${debtAmount.toLocaleString()} ج.م*`;
       if (item.carriedBalance !== 0) {
@@ -1151,14 +1151,15 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
                               <span className="font-black text-slate-900">{resident.name}</span>
                             </div>
                             {resident.phone && (
-                              <div className="flex items-center justify-between text-xs" dir="ltr">
+                              <div className="flex items-center justify-between text-xs phone-number-display" dir="ltr">
                                 <span className="text-slate-400 text-[10px] font-bold">الهاتف:</span>
                                 <a
                                   href={`tel:${formatMobileNumber(resident.phone)}`}
-                                  className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 font-bold text-[11px] tracking-wider"
+                                  className="inline-flex items-center gap-1 text-blue-900 hover:text-blue-700 font-bold text-[11px] font-mono tracking-wider phone-number-display"
+                                  dir="ltr"
                                 >
                                   <Phone className="w-3 h-3 text-blue-900" />
-                                  <span>{formatMobileNumber(resident.phone)}</span>
+                                  <span dir="ltr">{formatPhoneForDisplay(resident.phone)}</span>
                                 </a>
                               </div>
                             )}
@@ -1172,14 +1173,15 @@ export const DebtsReport: React.FC<DebtsReportProps> = ({
                                 <span className="font-black text-amber-950">{resident.tenantName}</span>
                               </div>
                               {resident.tenantPhone && (
-                                <div className="flex items-center justify-between" dir="ltr">
+                                <div className="flex items-center justify-between phone-number-display" dir="ltr">
                                   <span className="text-amber-800 text-[10px] font-bold">هاتف المستأجر:</span>
                                   <a
                                     href={`tel:${formatMobileNumber(resident.tenantPhone)}`}
-                                    className="inline-flex items-center gap-1 text-amber-900 hover:text-amber-950 font-bold text-[11px] tracking-wider"
+                                    className="inline-flex items-center gap-1 text-amber-900 hover:text-amber-950 font-bold text-[11px] font-mono tracking-wider phone-number-display"
+                                    dir="ltr"
                                   >
                                     <Phone className="w-3 h-3 text-amber-800" />
-                                    <span>{formatMobileNumber(resident.tenantPhone)}</span>
+                                    <span dir="ltr">{formatPhoneForDisplay(resident.tenantPhone)}</span>
                                   </a>
                                 </div>
                               )}

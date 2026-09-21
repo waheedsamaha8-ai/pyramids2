@@ -3,7 +3,7 @@ import { generateElementImage, generateElementImageBlob, GeneratedImageResult } 
 import { Resident, Payment, AppConfig } from '../types';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
 import { compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
-import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
+import { formatMobileNumber, formatPhoneForDisplay, toWhatsAppNumber } from '../utils/phoneUtils';
 import { 
   FileText, 
   CheckCircle2, 
@@ -566,6 +566,12 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">
                 {activeResident.activityType}
               </span>
+              {activeResident.phone && (
+                <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-xl text-xs font-mono font-bold inline-flex items-center gap-1 phone-number-display" dir="ltr">
+                  <Phone className="w-3 h-3 text-slate-500 shrink-0" />
+                  <span dir="ltr">{formatPhoneForDisplay(activeResident.phone)}</span>
+                </span>
+              )}
             </div>
             <h2 className="text-lg sm:text-xl font-black text-slate-950 flex items-center gap-2 mt-1">
               <span>{activeResident.name}</span>
@@ -1059,10 +1065,10 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               <div><span className="font-bold text-slate-500">رقم الوحدة:</span> <strong className="text-slate-900">شقة / وحدة ({activeResident.flatNumber})</strong></div>
               <div><span className="font-bold text-slate-500">اسم المالك:</span> <strong className="text-slate-900">{activeResident.name}</strong></div>
               <div><span className="font-bold text-slate-500">نوع النشاط:</span> <strong className="text-slate-900">{activeResident.activityType}</strong></div>
-              <div><span className="font-bold text-slate-500">رقم هاتف المالك:</span> <strong className="text-slate-900 font-mono" dir="ltr">{activeResident.phone ? formatMobileNumber(activeResident.phone) : '—'}</strong></div>
+              <div><span className="font-bold text-slate-500">رقم هاتف المالك:</span> <strong className="text-slate-900 font-mono phone-number-display" dir="ltr">{activeResident.phone ? formatPhoneForDisplay(activeResident.phone) : '—'}</strong></div>
               <div><span className="font-bold text-slate-500">نوع الملكية:</span> <strong className="text-slate-900">{activeResident.ownershipType || 'تمليك'}</strong></div>
               {activeResident.tenantName && (
-                <div><span className="font-bold text-slate-500">اسم المستأجر:</span> <strong className="text-slate-900">{activeResident.tenantName} {activeResident.tenantPhone ? <span dir="ltr" className="font-mono text-slate-700 font-bold">({formatMobileNumber(activeResident.tenantPhone)})</span> : ''}</strong></div>
+                <div><span className="font-bold text-slate-500">اسم المستأجر:</span> <strong className="text-slate-900">{activeResident.tenantName} {activeResident.tenantPhone ? <span dir="ltr" className="font-mono text-slate-700 font-bold phone-number-display">({formatPhoneForDisplay(activeResident.tenantPhone)})</span> : ''}</strong></div>
               )}
             </div>
           </div>
