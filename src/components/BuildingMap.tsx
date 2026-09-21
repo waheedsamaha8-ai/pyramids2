@@ -726,28 +726,37 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         })}
       </div>
 
-      {/* Unit Detail & Electronic Receipt Modal */}
+      {/* Unit Detail & Electronic Receipt Modal - True Full Screen & Full Height Page */}
       {activeUnit && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-fade-in overflow-y-auto">
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-100 shadow-2xl animate-scale-up text-right overflow-hidden my-auto max-h-[90vh] flex flex-col">
-            {/* Header */}
-            <div className="bg-slate-50 px-5 py-3.5 flex items-center justify-between border-b border-slate-100 shrink-0">
-              <button onClick={() => setActiveUnit(null)} className="p-1.5 hover:bg-slate-200 rounded-xl transition cursor-pointer">
-                <X className="w-4 h-4 text-slate-500" />
-              </button>
-              <div className="flex items-center gap-2.5">
-                <div>
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900">بيانات وإيصال الوحدة {activeUnit.unitNum}</h3>
-                  <p className="text-[9px] text-slate-500 font-bold">{activeUnit.floor.floorLabel} - {activeUnit.floor.activityType}</p>
-                </div>
-                <div className="w-8 h-8 bg-blue-900 text-white rounded-xl flex items-center justify-center shadow-md">
-                  <Home className="w-4 h-4" />
-                </div>
+        <div className="fixed inset-0 z-[100] w-screen h-screen min-h-screen bg-white flex flex-col text-right overflow-hidden animate-fade-in">
+          {/* Full Screen Page Header */}
+          <div className="bg-slate-900 text-white px-4 sm:px-8 py-4 flex items-center justify-between shadow-md shrink-0 border-b border-slate-800" dir="rtl">
+            {/* Close Button X on Top Corner */}
+            <button
+              type="button"
+              onClick={() => setActiveUnit(null)}
+              className="px-3 py-2 bg-slate-800 hover:bg-rose-600 hover:text-white text-slate-200 rounded-xl transition cursor-pointer flex items-center gap-2 text-xs sm:text-sm font-black shadow-xs active:scale-95"
+              title="إغلاق العرض (X)"
+            >
+              <X className="w-5 h-5 text-rose-400 sm:text-current" />
+              <span>إغلاق الصفحة</span>
+            </button>
+
+            {/* Unit Title & Info */}
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="text-right">
+                <h3 className="text-base sm:text-lg font-black text-white">بيانات وإيصال الوحدة {activeUnit.unitNum}</h3>
+                <p className="text-xs text-slate-300 font-bold">{activeUnit.floor.floorLabel} - {activeUnit.floor.activityType}</p>
+              </div>
+              <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-md shrink-0">
+                <Home className="w-6 h-6" />
               </div>
             </div>
+          </div>
 
-            {/* Content */}
-            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+          {/* Full Height Content Body */}
+          <div className="flex-1 w-full overflow-y-auto bg-slate-50 p-4 sm:p-6 md:p-8">
+            <div className="max-w-5xl mx-auto space-y-6 bg-white p-5 sm:p-8 rounded-3xl border border-slate-200/80 shadow-md">
               {financials ? (
                 <>
                   {/* WhatsApp Direct Share Toast Feedback */}
@@ -1031,25 +1040,14 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                 </div>
               )}
             </div>
-
-            {/* Footer */}
-            <div className="p-3 bg-slate-50 border-t border-slate-100 shrink-0">
-              <button 
-                type="button"
-                onClick={() => setActiveUnit(null)}
-                className="w-full py-2.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-black text-xs transition shadow-2xs cursor-pointer active:scale-95 flex items-center justify-center gap-1"
-              >
-                إغلاق
-              </button>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Direct WhatsApp Share & Receipt Image Preview Modal */}
+      {/* Direct WhatsApp Share & Receipt Image Preview Modal - Top of Page */}
       {sharedReceiptModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 text-right flex flex-col max-h-[92vh] my-auto">
+        <div className="fixed inset-0 z-[120] bg-slate-900/70 backdrop-blur-xs flex items-start justify-center p-2 sm:p-4 pt-3 sm:pt-6 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 text-right flex flex-col max-h-[92vh] my-0 animate-scale-up">
             {/* Modal Header */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
