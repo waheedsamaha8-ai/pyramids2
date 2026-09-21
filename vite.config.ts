@@ -8,9 +8,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
   return {
-    base: '/',
+    base: mode === 'production' ? './' : '/',
     plugins: [
       react(), 
       tailwindcss(),
