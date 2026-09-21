@@ -28,6 +28,7 @@ import {
   Sparkles,
   Copy,
   Check,
+  Send,
   X,
   ExternalLink
 } from 'lucide-react';
@@ -245,51 +246,98 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
     setGeneratedImageResult(null);
   }, [activeResident?.id, activeResident?.flatNumber, payments, effectiveCarriedBalance]);
 
-  // Builds formatted WhatsApp text summary
-  const getWhatsAppSummaryText = (target: 'owner' | 'tenant') => {
+  // Builds beautifully formatted WhatsApp text summary
+  const getWhatsAppSummaryText = (target: 'owner' | 'tenant' = 'owner') => {
     if (!activeResident) return '';
     const isDebt = financials.netBalance < 0;
     const isSurplus = financials.netBalance > 0;
-    
-    let text = `📄 *كشف حساب واشتراكات الوحدة (${activeResident.flatNumber})*\n`;
-    text += `👤 *المالك:* ${activeResident.name}\n`;
-    if (activeResident.ownershipType === 'إيجار' && activeResident.tenantName) {
-      text += `🏠 *المستأجر:* ${activeResident.tenantName}\n`;
-    }
-    text += `🏢 *نوع النشاط:* ${activeResident.activityType}\n`;
-    text += `💵 *الاشتراك الشهري:* ${financials.monthlyFee.toLocaleString()} ج.م\n`;
-    text += `📅 *تاريخ بدء المحاسبة المعتمد:* ${accountingStartDate}\n`;
+    const targetName = target === 'owner' ? activeResident.name : (activeResident.tenantName || 'السيد المستأجر');
+    const targetRole = target === 'owner' ? 'المالك' : 'المستأجر';
+    const todayStr = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    let text = `📋 *كشف حساب وااشتراكات الوحدة الشامل*\n`;
+    text += `🏢 *اتحاد ملاك عمارة بيراميدز فيو ١*\n`;
     text += `------------------------------------\n`;
+    text += `🚪 *الوحدة:* شقة ${activeResident.flatNumber} (${activeResident.activityType})\n`;
+    text += `👤 *الاسم (${targetRole}):* ${targetName}\n`;
+    if (target === 'owner' && activeResident.ownershipType === 'إيجار' && activeResident.tenantName) {
+      text += `🏠 *المستأجر الحالي:* ${activeResident.tenantName}\n`;
+    }
+    text += `💵 *قيمة الاشتراك الشهري:* ${financials.monthlyFee.toLocaleString()} ج.م\n`;
+    text += `📅 *تاريخ بدء المحاسبة:* ${accountingStartDate}\n`;
+    text += `🗓 *تاريخ التقرير:* ${todayStr}\n`;
+    text += `------------------------------------\n`;
+    text += `📊 *ملخص الموقف المالي والتسويات:*\n`;
     
     const initBal = effectiveCarriedBalance;
     if (initBal < 0) {
-      text += `• رصيد سابق مرحل: مديونية سابقة (-${Math.abs(initBal).toLocaleString()} ج.م)\n`;
+      text += `• *رصيد سابق مرحل:* ⚠️ مديونية سابقة (-${Math.abs(initBal).toLocaleString()} ج.م)\n`;
     } else if (initBal > 0) {
-      text += `• رصيد سابق مرحل: رصيد دائن فائض (+${initBal.toLocaleString()} ج.م)\n`;
+      text += `• *رصيد سابق مرحل:* ✨ رصيد دائن فائض (+${initBal.toLocaleString()} ج.م)\n`;
     } else {
-      text += `• رصيد سابق: لا يوجد (0 ج.م)\n`;
+      text += `• *رصيد سابق:* لا يوجد (0 ج.م)\n`;
     }
-    text += `• الشهور المستحقة حتى تاريخه: ${financials.monthsElapsed} شهر\n`;
-    text += `• إجمالي المطلوب حتى تاريخه: ${financials.expectedDues.toLocaleString()} ج.م\n`;
-    text += `• إجمالي المسدد فعلياً: ${financials.totalPaid.toLocaleString()} ج.م (${unitPayments.length} عملية سداد)\n`;
-    text += `• الرصيد الختامي حتى تاريخه: ${
-      isDebt 
-        ? `مديونية متأخرة (-${Math.abs(Math.round(financials.netBalance)).toLocaleString()} ج.م)` 
-        : isSurplus 
-        ? `رصيد دائن فائض (+${Math.round(financials.netBalance).toLocaleString()} ج.م)` 
-        : 'مسدد بالكامل ✨ (0 ج.م)'
-    }\n`;
+    text += `• *الشهور المستحقة:* ${financials.monthsElapsed} شهر\n`;
+    text += `• *إجمالي المطلوب حتى تاريخه:* ${financials.expectedDues.toLocaleString()} ج.م\n`;
+    text += `• *إجمالي المسدد فعلياً:* ${financials.totalPaid.toLocaleString()} ج.م (${unitPayments.length} عملية سداد)\n`;
+    text += `------------------------------------\n`;
+    text += `💰 *الرصيد الختامي حتى تاريخه:*\n`;
+    text += isDebt 
+      ? `🔴 *المطلوب سداده (مديونية متأخرة):* (-${Math.abs(Math.round(financials.netBalance)).toLocaleString()} ج.م)\n` 
+      : isSurplus 
+      ? `🟢 *رصيد دائن فائض لصالحكم:* (+${Math.round(financials.netBalance).toLocaleString()} ج.م)\n` 
+      : `✨ *الحساب مسدد بالكامل (0 ج.م)*\n`;
 
     if (unpaidMonthsList.length > 0) {
-      text += `\n⚠️ *الشهور غير المسددة (${unpaidMonthsList.length} شهر):*\n`;
+      text += `\n⚠️ *الشهور غير المسددة بالتفصيل (${unpaidMonthsList.length} شهر):*\n`;
       unpaidMonthsList.forEach(m => {
-        text += `• ${m.monthLabel}: ${m.paidAmount > 0 ? `سداد جزئي (${m.paidAmount} من ${m.fee} ج.م)` : `مستحق ${m.fee} ج.م`}\n`;
+        text += `• ${m.monthLabel}: ${m.paidAmount > 0 ? `سداد جزئي (${m.paidAmount.toLocaleString()} من ${m.fee.toLocaleString()} ج.م)` : `مستحق ${m.fee.toLocaleString()} ج.م`}\n`;
       });
+    } else {
+      text += `\n🎉 *جميع الشهور مسددة بالكامل حتى تاريخه.*\n`;
     }
 
-    text += `\n📌 *مرفق صورة كشف الحساب الرسمية الصادرة من نظام إدارة عمارة بيراميدز فيو ١.*\n`;
-    text += `مع تحيات إدارة العمارة 🏢`;
+    text += `\nشاكرين لكم حسن تعاونكم وحرصكم الدائم.\n`;
+    text += `إدارة اتحاد ملاك عمارة بيراميدز فيو ١ 🏢`;
     return text;
+  };
+
+  // Instant direct formatted text WhatsApp sharing for account statement
+  const handleSendWhatsAppText = (target: 'owner' | 'tenant') => {
+    if (!activeResident) return;
+    const phoneToUse = target === 'owner' ? (activeResident.phone || '') : (activeResident.tenantPhone || '');
+    let cleanPhone = toWhatsAppNumber(phoneToUse);
+
+    if (!cleanPhone) {
+      const name = target === 'owner' ? activeResident.name : (activeResident.tenantName || 'المستأجر');
+      const userEntered = window.prompt(`رقم هاتف (${name}) غير مسجل بالنظام.\nيرجى إدخال رقم الواتساب لإرسال كشف الحساب إليه مباشرة:`);
+      if (userEntered && userEntered.trim()) {
+        cleanPhone = toWhatsAppNumber(userEntered.trim());
+      } else {
+        alert('يرجى إدخال رقم هاتف صالح للتمكن من إرسال كشف الحساب عبر الواتساب.');
+        return;
+      }
+    }
+
+    const text = getWhatsAppSummaryText(target);
+    const waUrl = cleanPhone 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}` 
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+    try {
+      const link = document.createElement('a');
+      link.href = waUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    setToastMessage(`تم فتح محادثة الواتساب لإرسال كشف الحساب النصي المنسق لشقة ${activeResident.flatNumber} ✓`);
+    setTimeout(() => setToastMessage(null), 6000);
   };
 
   // Ultra-fast client-side image generator returning Blob & File for sharing
@@ -594,33 +642,33 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                 {activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? (
                   <>
                     <button
-                      onClick={() => handleShareWhatsApp('owner', true)}
-                      disabled={isGeneratingImage}
-                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-                      title="مشاركة صورة كشف الحساب مباشرة عبر واتساب المالك"
+                      type="button"
+                      onClick={() => handleSendWhatsAppText('owner')}
+                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 text-center"
+                      title="إرسال رسالة نصية منسقة بكشف الحساب عبر واتساب المالك"
                     >
-                      <Share2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">واتساب المالك</span>
+                      <Send className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">واتساب المالك (نص)</span>
                     </button>
                     <button
-                      onClick={() => handleShareWhatsApp('tenant', true)}
-                      disabled={isGeneratingImage}
-                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-                      title="مشاركة صورة كشف الحساب مباشرة عبر واتساب المستأجر"
+                      type="button"
+                      onClick={() => handleSendWhatsAppText('tenant')}
+                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 text-center"
+                      title="إرسال رسالة نصية منسقة بكشف الحساب عبر واتساب المستأجر"
                     >
-                      <Share2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">واتساب المستأجر</span>
+                      <Send className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">واتساب المستأجر (نص)</span>
                     </button>
                   </>
                 ) : (
                   <button
-                    onClick={() => handleShareWhatsApp('owner', true)}
-                    disabled={isGeneratingImage}
-                    className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-                    title="مشاركة صورة كشف الحساب مباشرة عبر رقم الواتساب المرتبط بالوحدة"
+                    type="button"
+                    onClick={() => handleSendWhatsAppText('owner')}
+                    className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 text-center"
+                    title="إرسال رسالة نصية منسقة ومجملة بكشف الحساب عبر واتساب الوحدة"
                   >
-                    <Share2 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">إرسال صورة واتساب</span>
+                    <Send className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">إرسال كشف الحساب نصياً</span>
                   </button>
                 )}
 

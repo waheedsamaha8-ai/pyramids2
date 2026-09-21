@@ -851,12 +851,23 @@ export default function App() {
 
   // Setup/Bootstrap app database
   const bootstrapApp = async (currentUser: User, accessToken: string, isBackground = false) => {
+    if (accessToken) {
+      googleApi.setAccessToken(accessToken);
+    }
     if (!isBackground) {
       setIsInitializingAuth(true);
     } else {
       setIsBackgroundSyncing(true);
     }
     try {
+      if (!currentUser || !accessToken) {
+        const cachedConfig = offlineSync.getCachedData<AppConfig>('config');
+        if (cachedConfig) setConfig(cachedConfig);
+        const cachedLayout = offlineSync.getCachedData<any[]>('building_layout');
+        if (cachedLayout) setBuildingLayout(cachedLayout);
+        return;
+      }
+
       // Find or create Sheets database
       await googleApi.initializeSpreadsheet();
 
@@ -917,7 +928,11 @@ export default function App() {
       await refreshAllData();
 
     } catch (err: any) {
-      logError(err, 'bootstrapApp');
+      if (err?.message?.includes('لم يتم تسجيل الدخول') || err?.message?.includes('الجلسة') || err?.message?.includes('Session expired')) {
+        console.warn('Bootstrap skipped due to session status:', err.message);
+      } else {
+        logError(err, 'bootstrapApp');
+      }
     } finally {
       setIsInitializingAuth(false);
       setIsBackgroundSyncing(false);

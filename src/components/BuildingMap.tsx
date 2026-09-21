@@ -278,17 +278,11 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
       else alert('رقم هاتف المالك غير مسجل');
     }
 
-    if (target === 'tenant' || target === 'both') {
+    if (target === 'tenant') {
       const text = generateText(resident.tenantName || 'السيد المستأجر', 'المستأجر');
       const phone = resident.tenantPhone || resident.phone;
-      if (target === 'both') {
-        setTimeout(() => {
-          if (phone) openWA(phone, text);
-        }, 800);
-      } else {
-        if (phone) openWA(phone, text);
-        else alert('رقم هاتف المستأجر غير مسجل');
-      }
+      if (phone) openWA(phone, text);
+      else alert('رقم هاتف المستأجر غير مسجل');
     }
   };
 
@@ -545,22 +539,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
       // Generate pristine, beautifully formatted image from dedicated receipt printable element
       const { blob, dataUrl } = await generateElementImageBlob('building-map-receipt-printable', fileName, 680);
 
-      await shareImageViaWhatsApp({
-        imageBlob: blob,
-        fileName,
-        phone: targetPhone,
-        recipientName: targetName,
-        title: isPaid ? `إيصال سداد شقة ${flatNum}` : `إشعار مطالبة شقة ${flatNum}`,
-        text: msgText,
-        onSuccessToast: (msg) => {
-          setToastMsg(msg);
-          setTimeout(() => setToastMsg(null), 8000);
-        },
-        onErrorToast: (err) => {
-          alert(err);
-        }
-      });
-
+      // Open the preview and share modal instantly (same smooth experience as account statement)
       setSharedReceiptModal({
         imageBlob: blob,
         imageDataUrl: dataUrl,
@@ -1094,11 +1073,11 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
               </button>
             </div>
 
-            {/* Success Toast / Instruction Banner */}
+            {/* Instruction Banner */}
             <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2 shrink-0">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <div className="flex-1 leading-snug">
-                تم تجهيز وفتح محادثة الواتساب مباشرة لرقم <span className="font-black underline">{sharedReceiptModal.recipientPhone}</span> كما تم نسخ الصورة للحافظة وتحميلها. اضغط <span className="underline font-black">لصق (Ctrl+V)</span> داخل الشات لإرسال الصورة فوراً!
+                تم توليد ومعاينة {sharedReceiptModal.title} بنجاح! يمكنك فتح الواتساب لإرسال الإشعار، أو مشاركة وتحميل صورة الإيصال مباشرة.
               </div>
             </div>
 
@@ -1133,10 +1112,33 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                   }
                 }}
                 className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs text-center active:scale-95"
-                title="إعادة فتح محادثة الواتساب"
+                title="فتح محادثة الواتساب مباشرة"
               >
                 <Send className="w-3.5 h-3.5 shrink-0" />
-                <span>فتح الواتساب</span>
+                <span>إرسال نص الواتس</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  shareImageViaWhatsApp({
+                    imageBlob: sharedReceiptModal.imageBlob,
+                    fileName: sharedReceiptModal.fileName,
+                    phone: sharedReceiptModal.recipientPhone,
+                    recipientName: sharedReceiptModal.recipientName,
+                    title: sharedReceiptModal.title,
+                    text: sharedReceiptModal.msgText,
+                    onSuccessToast: (msg) => {
+                      setToastMsg(msg);
+                      setTimeout(() => setToastMsg(null), 8000);
+                    },
+                  });
+                }}
+                className="py-2.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs text-center active:scale-95"
+                title="مشاركة الصورة وإرفاقها في الواتساب"
+              >
+                <Share2 className="w-3.5 h-3.5 shrink-0 text-emerald-200" />
+                <span>مشاركة الصورة</span>
               </button>
 
               <button
@@ -1196,7 +1198,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
               <button
                 type="button"
                 onClick={() => setSharedReceiptModal(null)}
-                className="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs text-center active:scale-95"
+                className="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs text-center active:scale-95 col-span-2 sm:col-span-4"
               >
                 <span>إغلاق</span>
               </button>
