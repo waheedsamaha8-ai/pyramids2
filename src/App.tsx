@@ -321,18 +321,10 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Filter out chat, complaint, and communication notifications in Assistant Mode
+  // All notifications visible across roles
   const visibleNotifications = useMemo(() => {
-    if (role === 'ASSISTANT') {
-      return notifications.filter(n => 
-        n.category !== 'chat' && 
-        n.category !== 'communication' && 
-        n.category !== 'complaint' &&
-        !(n.title && (n.title.includes('دردشة') || n.title.includes('شكوى') || n.title.includes('رسالة')))
-      );
-    }
     return notifications;
-  }, [notifications, role]);
+  }, [notifications]);
   const [syncing, setSyncing] = useState(false);
   const [syncStatusText, setSyncStatusText] = useState('');
   const [mobileMenuOpen, setMenuOpen] = useState(false);
@@ -2017,10 +2009,17 @@ export default function App() {
   // Chat room and complaints board handlers
   const handleSendChatMessage = (text: string, imageUrl?: string) => {
     const isBase64 = Boolean(imageUrl && imageUrl.startsWith('data:'));
+    const senderName = role === 'ASSISTANT'
+      ? 'المساعد الفني'
+      : (role === 'ADMIN' ? (user?.displayName || 'رئيس الاتحاد (وحيد سماحة)') : (config.adminResidentProfile?.name || currentResidentObj?.name || user?.displayName || 'ساكن'));
+    const senderFlat = role === 'ASSISTANT'
+      ? 'فني الصيانة'
+      : (role === 'ADMIN' ? 'إدارة الاتحاد' : (flatNumber || config.adminResidentProfile?.flatNumber || '?'));
+
     const safeMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
-      senderName: user ? user.displayName || 'ساكن' : 'ساكن',
-      flatNumber,
+      senderName,
+      flatNumber: senderFlat,
       text,
       imageUrl: isBase64 ? undefined : imageUrl,
       timestamp: new Date().toISOString(),
@@ -2034,7 +2033,7 @@ export default function App() {
     offlineSync.saveCachedData('chat_messages', updated);
     addNotification(
       'رسالة دردشة جديدة',
-      `${safeMsg.senderName} (وحدة ${flatNumber || '؟'}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`,
+      `${safeMsg.senderName} (${senderFlat}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`,
       'info',
       'chat'
     );
@@ -2063,14 +2062,20 @@ export default function App() {
   const handleAddComplaint = (title: string, description: string, isAnonymous?: boolean, imageUrl?: string) => {
     const residentName = isAnonymous 
       ? 'فاعل خير (مجهول)' 
-      : (user ? user.displayName || 'ساكن' : 'ساكن');
+      : (role === 'ASSISTANT'
+        ? 'المساعد الفني'
+        : (role === 'ADMIN' ? (user?.displayName || 'رئيس الاتحاد (وحيد سماحة)') : (config.adminResidentProfile?.name || currentResidentObj?.name || user?.displayName || 'ساكن')));
+
+    const senderFlat = isAnonymous 
+      ? undefined 
+      : (role === 'ASSISTANT' ? 'فني الصيانة' : (role === 'ADMIN' ? 'إدارة الاتحاد' : (flatNumber || config.adminResidentProfile?.flatNumber)));
 
     const isBase64 = Boolean(imageUrl && imageUrl.startsWith('data:'));
     const safeComplaint: PublicComplaint = {
       id: `comp_${Date.now()}`,
       title,
       description,
-      flatNumber: isAnonymous ? undefined : flatNumber,
+      flatNumber: senderFlat,
       residentName,
       isAnonymous,
       imageUrl: isBase64 ? undefined : imageUrl,
@@ -2105,13 +2110,17 @@ export default function App() {
     } else {
       offlineSync.enqueueAction('ADD_COMPLAINT', queuedPayload);
     }
-    addNotification('شكوى ومقترح جديد', `قام الساكن ${safeComplaint.residentName} (وحدة ${flatNumber || '؟'}) بنشر موضوع: "${title}"`, 'warning', 'communication');
+    addNotification('شكوى ومقترح جديد', `قام ${safeComplaint.residentName} (${senderFlat ? `وحدة ${senderFlat}` : 'مجهول'}) بنشر موضوع: "${title}"`, 'warning', 'communication');
   };
 
   const handleAddCommentToComplaint = (complaintId: string, text: string) => {
+    const commentSenderName = role === 'ASSISTANT'
+      ? 'المساعد الفني'
+      : (role === 'ADMIN' ? (user?.displayName || 'رئيس الاتحاد (وحيد سماحة)') : (config.adminResidentProfile?.name || currentResidentObj?.name || user?.displayName || 'ساكن العمارة'));
+
     const newComment: ComplaintComment = {
       id: `comm_${Date.now()}`,
-      senderName: user ? user.displayName || 'ساكن مجهول' : 'ساكن مجهول',
+      senderName: commentSenderName,
       text,
       timestamp: new Date().toISOString(),
     };
@@ -2797,14 +2806,12 @@ export default function App() {
                   </button>
                   {expandedSections.includes('services') && (
                     <div className="pr-3 flex flex-col gap-1 mt-1 border-r-2 border-purple-200 mr-2">
-                      {role !== 'ASSISTANT' && (
-                        <button
-                          onClick={() => { setActiveTab('chat'); setMenuOpen(false); }}
-                          className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'chat' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          الدردشة والشكاوى العامة
-                        </button>
-                      )}
+                      <button
+                        onClick={() => { setActiveTab('chat'); setMenuOpen(false); }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'chat' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        الدردشة والشكاوى العامة
+                      </button>
                       <button
                         onClick={() => { setActiveTab('maintenance'); setMenuOpen(false); }}
                         className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'maintenance' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
@@ -3175,43 +3182,41 @@ export default function App() {
                 <h3 className="text-xs font-black text-slate-900">قسم التواصل والخدمات</h3>
               </div>
 
-              {/* Row 1: Residents Chat spanning full width of the 3 buttons - Hidden for ASSISTANT */}
-              {role !== 'ASSISTANT' && (
-                <button
-                  onClick={() => {
-                    setChatSubTab('room');
-                    setActiveTab('chat');
-                  }}
-                  className="w-full bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-100 shadow-xs flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition active:scale-[0.99] group relative"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition shrink-0">
-                      <MessageCircle className="w-5 h-5 stroke-[2]" />
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-indigo-600 transition block">
-                        دردشة السكان
-                      </span>
-                      <span className="text-[8px] leading-[15px] text-slate-400 font-bold block">
-                        غرفة النقاش والمحادثات المباشرة بين سكان وملاك العمارة
-                      </span>
-                    </div>
+              {/* Row 1: Residents Chat spanning full width */}
+              <button
+                onClick={() => {
+                  setChatSubTab('room');
+                  setActiveTab('chat');
+                }}
+                className="w-full bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-100 shadow-xs flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition active:scale-[0.99] group relative"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition shrink-0">
+                    <MessageCircle className="w-5 h-5 stroke-[2]" />
                   </div>
+                  <div className="text-right">
+                    <span className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-indigo-600 transition block">
+                      دردشة السكان
+                    </span>
+                    <span className="text-[8px] leading-[15px] text-slate-400 font-bold block">
+                      غرفة النقاش والمحادثات المباشرة بين سكان وملاك العمارة والمساعد الفني
+                    </span>
+                  </div>
+                </div>
 
-                  {messages.length > 0 ? (
-                    <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 bg-indigo-100/70 text-indigo-700 rounded-full shrink-0">
-                      {messages.length} رسالة
-                    </span>
-                  ) : (
-                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 px-2.5 py-1 bg-slate-50 rounded-full shrink-0">
-                      غرفة المناقشة
-                    </span>
-                  )}
-                </button>
-              )}
+                {messages.length > 0 ? (
+                  <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 bg-indigo-100/70 text-indigo-700 rounded-full shrink-0">
+                    {messages.length} رسالة
+                  </span>
+                ) : (
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 px-2.5 py-1 bg-slate-50 rounded-full shrink-0">
+                    غرفة المناقشة
+                  </span>
+                )}
+              </button>
 
               {/* Grid of Service Buttons */}
-              <div className={`grid ${role === 'ASSISTANT' ? 'grid-cols-3' : 'grid-cols-3'} gap-2 sm:gap-3`}>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 
                 {/* 1. Maintenance Requests */}
                 <button
@@ -3288,58 +3293,56 @@ export default function App() {
                   )}
                 </button>
 
-                {role !== 'ASSISTANT' && (
-                  <>
-                    {/* 4. Complaints & Suggestions */}
-                    <button
-                      onClick={() => {
-                        setChatSubTab('complaints');
-                        setActiveTab('chat');
-                      }}
-                      className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer hover:border-rose-300 hover:shadow-md transition active:scale-[0.98] group relative"
-                    >
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition">
-                        <AlertTriangle className="w-5 h-5 stroke-[2]" />
-                      </div>
-                      <span className="text-[11px] sm:text-xs font-extrabold text-slate-900 group-hover:text-rose-600 transition leading-tight">
-                        الشكاوى والمقترحات
-                      </span>
-                      {complaints.length > 0 ? (
-                        <span className="text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 bg-rose-100/70 text-rose-700 rounded-full">
-                          {complaints.length} شكوى ومقترح
-                        </span>
-                      ) : (
-                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400">
-                          صندوق المقترحات
-                        </span>
-                      )}
-                    </button>
+                {/* 4. Complaints & Suggestions */}
+                <button
+                  onClick={() => {
+                    setChatSubTab('complaints');
+                    setActiveTab('chat');
+                  }}
+                  className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer hover:border-rose-300 hover:shadow-md transition active:scale-[0.98] group relative"
+                >
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition">
+                    <AlertTriangle className="w-5 h-5 stroke-[2]" />
+                  </div>
+                  <span className="text-[11px] sm:text-xs font-extrabold text-slate-900 group-hover:text-rose-600 transition leading-tight">
+                    الشكاوى والمقترحات
+                  </span>
+                  {complaints.length > 0 ? (
+                    <span className="text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 bg-rose-100/70 text-rose-700 rounded-full">
+                      {complaints.length} شكوى ومقترح
+                    </span>
+                  ) : (
+                    <span className="text-[8px] sm:text-[9px] font-bold text-slate-400">
+                      صندوق المقترحات
+                    </span>
+                  )}
+                </button>
 
-                    {/* 5. Voting & Polls */}
-                    <button
-                      onClick={() => {
-                        setPollsSubTab('polls');
-                        setActiveTab('polls');
-                      }}
-                      className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer hover:border-purple-300 hover:shadow-md transition active:scale-[0.98] group relative"
-                    >
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition">
-                        <Vote className="w-5 h-5 stroke-[2]" />
-                      </div>
-                      <span className="text-[11px] sm:text-xs font-extrabold text-slate-900 group-hover:text-purple-600 transition leading-tight">
-                        التصويت والاستبيانات
+                {role !== 'ASSISTANT' && (
+                  /* 5. Voting & Polls */
+                  <button
+                    onClick={() => {
+                      setPollsSubTab('polls');
+                      setActiveTab('polls');
+                    }}
+                    className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer hover:border-purple-300 hover:shadow-md transition active:scale-[0.98] group relative"
+                  >
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition">
+                      <Vote className="w-5 h-5 stroke-[2]" />
+                    </div>
+                    <span className="text-[11px] sm:text-xs font-extrabold text-slate-900 group-hover:text-purple-600 transition leading-tight">
+                      التصويت والاستبيانات
+                    </span>
+                    {polls.length > 0 ? (
+                      <span className="text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 bg-purple-100/70 text-purple-700 rounded-full">
+                        {polls.filter(p => p.status === 'ACTIVE').length} استبيان مفتوح
                       </span>
-                      {polls.length > 0 ? (
-                        <span className="text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 bg-purple-100/70 text-purple-700 rounded-full">
-                          {polls.filter(p => p.status === 'ACTIVE').length} استبيان مفتوح
-                        </span>
-                      ) : (
-                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400">
-                          استطلاعات الرأي
-                        </span>
-                      )}
-                    </button>
-                  </>
+                    ) : (
+                      <span className="text-[8px] sm:text-[9px] font-bold text-slate-400">
+                        استطلاعات الرأي
+                      </span>
+                    )}
+                  </button>
                 )}
 
                 {/* 6. Agenda & Calendar */}

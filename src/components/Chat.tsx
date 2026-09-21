@@ -342,7 +342,8 @@ export const Chat: React.FC<ChatProps> = ({
               messages.map((msg) => {
                 const isMe = Boolean(
                   (msg.senderName && userName && msg.senderName.trim().toLowerCase() === userName.trim().toLowerCase()) ||
-                  (msg.flatNumber && flatNumber && String(msg.flatNumber).trim() === String(flatNumber).trim())
+                  (msg.flatNumber && flatNumber && String(msg.flatNumber).trim() === String(flatNumber).trim()) ||
+                  (role === 'ASSISTANT' && (msg.senderName === 'المساعد الفني' || msg.flatNumber === 'فني الصيانة'))
                 );
                 const canModify = isMe || role === 'ADMIN';
                 const isEditing = editingMessageId === msg.id;
@@ -863,28 +864,31 @@ export const Chat: React.FC<ChatProps> = ({
                                     <p className="text-xs text-slate-800 dark:text-slate-200 font-bold leading-relaxed">{comment.text}</p>
                                     
                                     {/* Edit / Delete actions for comment owner or union president */}
-                                    {(role === 'ADMIN' || comment.senderName === userName) && (
-                                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50 dark:border-slate-800 mt-1.5">
-                                        {comment.senderName === userName && (
+                                    {(() => {
+                                      const isMyComment = comment.senderName === userName || (role === 'ASSISTANT' && comment.senderName === 'المساعد الفني');
+                                      return (role === 'ADMIN' || isMyComment) && (
+                                        <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50 dark:border-slate-800 mt-1.5">
+                                          {isMyComment && (
+                                            <button
+                                              onClick={() => startEditingComment(comment.id, comment.text)}
+                                              className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                              title="تعديل التعليق"
+                                            >
+                                              <Edit className="w-2.5 h-2.5" />
+                                              <span>تعديل</span>
+                                            </button>
+                                          )}
                                           <button
-                                            onClick={() => startEditingComment(comment.id, comment.text)}
-                                            className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5 cursor-pointer"
-                                            title="تعديل التعليق"
+                                            onClick={() => handleDeleteCommentClick(comp.id, comment.id)}
+                                            className="text-[10px] text-red-500 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                            title="حذف التعليق"
                                           >
-                                            <Edit className="w-2.5 h-2.5" />
-                                            <span>تعديل</span>
+                                            <Trash2 className="w-2.5 h-2.5" />
+                                            <span>حذف</span>
                                           </button>
-                                        )}
-                                        <button
-                                          onClick={() => handleDeleteCommentClick(comp.id, comment.id)}
-                                          className="text-[10px] text-red-500 hover:underline flex items-center gap-0.5 cursor-pointer"
-                                          title="حذف التعليق"
-                                        >
-                                          <Trash2 className="w-2.5 h-2.5" />
-                                          <span>حذف</span>
-                                        </button>
-                                      </div>
-                                    )}
+                                        </div>
+                                      );
+                                    })()}
                                   </>
                                 )}
                               </div>
