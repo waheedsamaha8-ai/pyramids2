@@ -54,10 +54,21 @@ export function sanitizeStyleText(cssText: string): string {
   return cssText.replace(MODERN_COLOR_REGEX, (match) => parseCssColorToRgb(match));
 }
 
+export interface GeneratedImageResult {
+  dataUrl: string;
+  blob: Blob;
+  file: File;
+  download: () => void;
+}
+
 /**
  * Ultra-fast client-side image generator for printable areas with full oklch/oklab color parsing fix.
+ * Returns the generated dataUrl, blob, file, and download trigger.
  */
-export async function generateElementImage(elementId: string, fileName: string): Promise<void> {
+export async function generateElementImageBlob(
+  elementId: string,
+  fileName: string
+): Promise<GeneratedImageResult> {
   const elem = document.getElementById(elementId);
   if (!elem) {
     throw new Error(`Element with id "${elementId}" not found`);
@@ -167,14 +178,31 @@ export async function generateElementImage(elementId: string, fileName: string):
       },
     });
 
-    // Download PNG
     const dataUrl = canvas.toDataURL('image/png', 1.0);
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const blob = await new Promise<Blob>((resolve) => {
+      canvas.toBlob((b) => {
+        resolve(b || new Blob([], { type: 'image/png' }));
+      }, 'image/png', 1.0);
+    });
+
+    const safeFileName = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
+    const file = new File([blob], safeFileName, { type: 'image/png' });
+
+    const download = () => {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = safeFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    return {
+      dataUrl,
+      blob,
+      file,
+      download,
+    };
   } finally {
     // Always restore original element styles
     if (hadHiddenClass) {
@@ -188,4 +216,12 @@ export async function generateElementImage(elementId: string, fileName: string):
     elem.style.zIndex = prevZIndex;
     elem.style.backgroundColor = prevBg;
   }
+}
+
+/**
+ * Ultra-fast client-side image generator for printable areas that directly downloads the file.
+ */
+export async function generateElementImage(elementId: string, fileName: string): Promise<void> {
+  const result = await generateElementImageBlob(elementId, fileName);
+  result.download();
 }

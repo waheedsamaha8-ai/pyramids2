@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { generateElementImage } from '../utils/imageExport';
+import React, { useState, useMemo, useEffect } from 'react';
+import { generateElementImage, generateElementImageBlob, GeneratedImageResult } from '../utils/imageExport';
 import { Resident, Payment, AppConfig } from '../types';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
 import { compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
@@ -25,7 +25,11 @@ import {
   Image as ImageIcon,
   Download,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Copy,
+  Check,
+  X,
+  ExternalLink
 } from 'lucide-react';
 
 interface ResidentAccountStatementProps {
@@ -229,21 +233,183 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
     return monthsTimeline;
   }, [monthFilter, paidMonthsList, unpaidMonthsList, monthsTimeline]);
 
-  // Image generation state for unit statement
+  // Image generation & sharing states
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [generatedImageResult, setGeneratedImageResult] = useState<GeneratedImageResult | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
-  // Ultra-fast client-side image generation for Unit Account Statement
-  const handleGenerateImage = async () => {
-    if (!activeResident) return;
+  // Clear cached generated image whenever active resident or financial data changes
+  useEffect(() => {
+    setGeneratedImageResult(null);
+  }, [activeResident?.id, activeResident?.flatNumber, payments, effectiveCarriedBalance]);
+
+  // Builds formatted WhatsApp text summary
+  const getWhatsAppSummaryText = (target: 'owner' | 'tenant') => {
+    if (!activeResident) return '';
+    const isDebt = financials.netBalance < 0;
+    const isSurplus = financials.netBalance > 0;
+    
+    let text = `📄 *كشف حساب واشتراكات الوحدة (${activeResident.flatNumber})*\n`;
+    text += `👤 *المالك:* ${activeResident.name}\n`;
+    if (activeResident.ownershipType === 'إيجار' && activeResident.tenantName) {
+      text += `🏠 *المستأجر:* ${activeResident.tenantName}\n`;
+    }
+    text += `🏢 *نوع النشاط:* ${activeResident.activityType}\n`;
+    text += `💵 *الاشتراك الشهري:* ${financials.monthlyFee.toLocaleString()} ج.م\n`;
+    text += `📅 *تاريخ بدء المحاسبة المعتمد:* ${accountingStartDate}\n`;
+    text += `------------------------------------\n`;
+    
+    const initBal = effectiveCarriedBalance;
+    if (initBal < 0) {
+      text += `• رصيد سابق مرحل: مديونية سابقة (-${Math.abs(initBal).toLocaleString()} ج.م)\n`;
+    } else if (initBal > 0) {
+      text += `• رصيد سابق مرحل: رصيد دائن فائض (+${initBal.toLocaleString()} ج.م)\n`;
+    } else {
+      text += `• رصيد سابق: لا يوجد (0 ج.م)\n`;
+    }
+    text += `• الشهور المستحقة حتى تاريخه: ${financials.monthsElapsed} شهر\n`;
+    text += `• إجمالي المطلوب حتى تاريخه: ${financials.expectedDues.toLocaleString()} ج.م\n`;
+    text += `• إجمالي المسدد فعلياً: ${financials.totalPaid.toLocaleString()} ج.م (${unitPayments.length} عملية سداد)\n`;
+    text += `• الرصيد الختامي حتى تاريخه: ${
+      isDebt 
+        ? `مديونية متأخرة (-${Math.abs(Math.round(financials.netBalance)).toLocaleString()} ج.م)` 
+        : isSurplus 
+        ? `رصيد دائن فائض (+${Math.round(financials.netBalance).toLocaleString()} ج.م)` 
+        : 'مسدد بالكامل ✨ (0 ج.م)'
+    }\n`;
+
+    if (unpaidMonthsList.length > 0) {
+      text += `\n⚠️ *الشهور غير المسددة (${unpaidMonthsList.length} شهر):*\n`;
+      unpaidMonthsList.forEach(m => {
+        text += `• ${m.monthLabel}: ${m.paidAmount > 0 ? `سداد جزئي (${m.paidAmount} من ${m.fee} ج.م)` : `مستحق ${m.fee} ج.م`}\n`;
+      });
+    }
+
+    text += `\n📌 *مرفق صورة كشف الحساب الرسمية الصادرة من نظام إدارة عمارة بيراميدز فيو ١.*\n`;
+    text += `مع تحيات إدارة العمارة 🏢`;
+    return text;
+  };
+
+  // Ultra-fast client-side image generator returning Blob & File for sharing
+  const generateFreshImageBlob = async (): Promise<GeneratedImageResult | null> => {
+    if (!activeResident) return null;
     setIsGeneratingImage(true);
     try {
       const cleanName = activeResident.name.trim().replace(/\s+/g, '_');
-      await generateElementImage('statement-printable-area', `كشف_حساب_وحدة_${activeResident.flatNumber}_${cleanName}.png`);
+      const fileName = `كشف_حساب_وحدة_${activeResident.flatNumber}_${cleanName}.png`;
+      const res = await generateElementImageBlob('statement-printable-area', fileName);
+      setGeneratedImageResult(res);
+      return res;
     } catch (e) {
       console.error('Image generation error:', e);
       alert('حدث خطأ أثناء توليد صورة كشف الحساب، يُرجى المحاولة مرة أخرى.');
+      return null;
     } finally {
       setIsGeneratingImage(false);
+    }
+  };
+
+  // Opens the visual image preview and direct sharing modal
+  const handleOpenShareModal = async () => {
+    let img = generatedImageResult;
+    if (!img) {
+      img = await generateFreshImageBlob();
+    }
+    if (img) {
+      setIsShareModalOpen(true);
+    }
+  };
+
+  // Direct WhatsApp sharing with Image support
+  const handleShareWhatsApp = async (target: 'owner' | 'tenant', withImage: boolean = true) => {
+    if (!activeResident) return;
+    const phoneToUse = target === 'owner' ? (activeResident.phone || '') : (activeResident.tenantPhone || '');
+    const cleanPhone = toWhatsAppNumber(phoneToUse);
+    const targetLabel = target === 'owner' ? `المالك (${activeResident.name})` : `المستأجر (${activeResident.tenantName})`;
+    const text = getWhatsAppSummaryText(target);
+
+    if (!withImage) {
+      const waUrl = cleanPhone 
+        ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` 
+        : `https://wa.me/?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+      return;
+    }
+
+    let img = generatedImageResult;
+    if (!img) {
+      img = await generateFreshImageBlob();
+    }
+    if (!img) return;
+
+    // 1. Try Native Web Share API with File (Mobile devices send image directly to WhatsApp recipient!)
+    if (navigator.canShare && navigator.canShare({ files: [img.file] })) {
+      try {
+        await navigator.share({
+          files: [img.file],
+          title: `كشف حساب وحدة ${activeResident.flatNumber}`,
+          text: text,
+        });
+        return;
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') return;
+        console.warn('Native file share failed or cancelled, using fallback:', shareErr);
+      }
+    }
+
+    // 2. Desktop / browser fallback: copy image to clipboard + download PNG + open WhatsApp Web/URL
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': img.blob })
+        ]);
+        copied = true;
+      }
+    } catch (e) {
+      console.warn('Clipboard write failed:', e);
+    }
+
+    img.download();
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const waUrl = isMobile
+      ? (cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`)
+      : (cleanPhone ? `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}` : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`);
+
+    window.open(waUrl, '_blank');
+
+    setToastMessage(
+      copied
+        ? `تم نسخ صورة كشف الحساب للحافظة وتحميلها لجهازك، وجاري فتح محادثة ${targetLabel} على واتساب — اضغط (لصق / Ctrl+V) في الشات لإرسال الصورة فوراً!`
+        : `تم تحميل صورة كشف الحساب لجهازك وفتح محادثة ${targetLabel} على واتساب — يمكنك إرفاق الصورة المحفوظة في الشات الآن.`
+    );
+    setTimeout(() => setToastMessage(null), 8000);
+  };
+
+  // Copy Image to Clipboard
+  const handleCopyImageToClipboard = async () => {
+    let img = generatedImageResult;
+    if (!img) {
+      img = await generateFreshImageBlob();
+    }
+    if (!img) return;
+
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': img.blob })
+        ]);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 3000);
+      } else {
+        alert('المتصفح لا يدعم نسخ الصور مباشرة، يُرجى الضغط على تحميل الصورة.');
+      }
+    } catch (e) {
+      console.error('Clipboard copy error:', e);
+      alert('تعذر نسخ الصورة للحافظة، يمكنك تحميل الصورة بدلاً من ذلك.');
     }
   };
 
@@ -298,6 +464,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
               .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
               .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+              .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
               .gap-3 { gap: 0.75rem; }
               .gap-8 { gap: 2rem; }
               .mb-6 { margin-bottom: 1.5rem; }
@@ -328,54 +495,6 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
     setTimeout(() => {
       document.body.classList.remove('printing-statement');
     }, 1200);
-  };
-
-  const handleShareWhatsApp = (target: 'owner' | 'tenant') => {
-    if (!activeResident) return;
-    const isDebt = financials.netBalance < 0;
-    const isSurplus = financials.netBalance > 0;
-    
-    let text = `📄 *كشف حساب واشتراكات الوحدة (${activeResident.flatNumber})*\n`;
-    text += `👤 *المالك:* ${activeResident.name}\n`;
-    if (activeResident.ownershipType === 'إيجار' && activeResident.tenantName) {
-      text += `🏠 *المستأجر:* ${activeResident.tenantName}\n`;
-    }
-    text += `🏢 *نوع النشاط:* ${activeResident.activityType}\n`;
-    text += `💵 *الاشتراك الشهري:* ${financials.monthlyFee} ج.م\n`;
-    text += `📅 *تاريخ بدء المحاسبة:* ${accountingStartDate}\n`;
-    text += `------------------------------------\n`;
-    const initBal = activeResident.initialBalance || 0;
-    if (initBal < 0) {
-      text += `• رصيد سابق / مديونية قديمة: مديونية مرحلة (-${Math.abs(initBal).toLocaleString()} ج.م)\n`;
-    } else if (initBal > 0) {
-      text += `• رصيد سابق مرحل: رصيد دائن (+${initBal.toLocaleString()} ج.م)\n`;
-    } else {
-      text += `• رصيد سابق: لا يوجد (0 ج.م)\n`;
-    }
-    text += `• الشهور المستحقة حتى تاريخه: ${financials.monthsElapsed} شهر\n`;
-    text += `• إجمالي المطلوب: ${financials.expectedDues.toLocaleString()} ج.م\n`;
-    text += `• إجمالي المسدد: ${financials.totalPaid.toLocaleString()} ج.م\n`;
-    text += `• الرصيد الختامي حتى تاريخه: ${
-      isDebt 
-        ? `مديونية متأخرة (-${Math.abs(financials.netBalance).toLocaleString()} ج.م)` 
-        : isSurplus 
-        ? `رصيد فائض (+${financials.netBalance.toLocaleString()} ج.م)` 
-        : 'مسدد بالكامل (0 ج.م)'
-    }\n`;
-
-    if (unpaidMonthsList.length > 0) {
-      text += `\n⚠️ *الشهور غير المدفوعة (${unpaidMonthsList.length}):*\n`;
-      unpaidMonthsList.forEach(m => {
-        text += `• ${m.monthLabel}: مستحق ${m.fee} ج.م\n`;
-      });
-    }
-
-    text += `\nمع تحيات إدارة العمارة 🏢`;
-
-    const phoneToUse = target === 'owner' ? (activeResident.phone || '') : (activeResident.tenantPhone || '');
-    const cleanPhone = toWhatsAppNumber(phoneToUse);
-    const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
   };
 
   if (!activeResident) {
@@ -463,23 +582,25 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
 
           {/* Actions Toolbar (Hidden in resident mode) */}
           {!isResidentOnly && (
-            <div className="w-full pt-2">
-              {/* 3 Equal Width Action Buttons in 1 Row */}
+            <div className="w-full pt-2 space-y-2">
+              {/* Action Buttons in 1 Row */}
               <div className={`grid ${activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? 'grid-cols-4' : 'grid-cols-3'} gap-2 w-full`}>
                 {activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? (
                   <>
                     <button
-                      onClick={() => handleShareWhatsApp('owner')}
-                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                      title="مشاركة ملخص الحساب مع المالك عبر واتساب"
+                      onClick={() => handleShareWhatsApp('owner', true)}
+                      disabled={isGeneratingImage}
+                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                      title="مشاركة صورة كشف الحساب مباشرة عبر واتساب المالك"
                     >
                       <Share2 className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">واتساب المالك</span>
                     </button>
                     <button
-                      onClick={() => handleShareWhatsApp('tenant')}
-                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                      title="مشاركة ملخص الحساب مع المستأجر عبر واتساب"
+                      onClick={() => handleShareWhatsApp('tenant', true)}
+                      disabled={isGeneratingImage}
+                      className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                      title="مشاركة صورة كشف الحساب مباشرة عبر واتساب المستأجر"
                     >
                       <Share2 className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">واتساب المستأجر</span>
@@ -487,20 +608,21 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                   </>
                 ) : (
                   <button
-                    onClick={() => handleShareWhatsApp('owner')}
-                    className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                    title="مشاركة ملخص الحساب عبر واتساب"
+                    onClick={() => handleShareWhatsApp('owner', true)}
+                    disabled={isGeneratingImage}
+                    className="w-full py-2.5 px-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                    title="مشاركة صورة كشف الحساب مباشرة عبر رقم الواتساب المرتبط بالوحدة"
                   >
                     <Share2 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">إرسال واتساب</span>
+                    <span className="truncate">إرسال صورة واتساب</span>
                   </button>
                 )}
 
                 <button
-                  onClick={handleGenerateImage}
+                  onClick={handleOpenShareModal}
                   disabled={isGeneratingImage}
-                  className="w-full py-2.5 px-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-                  title="توليد صورة عالية الدقة لسجل كشف حساب الوحدة وحفظها بسرعة"
+                  className="w-full py-2.5 px-1 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  title="توليد صورة كشف الحساب ومعاينتها ومشاركتها مباشرة"
                 >
                   {isGeneratingImage ? (
                     <>
@@ -509,8 +631,8 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                     </>
                   ) : (
                     <>
-                      <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                      <span className="truncate">توليد صورة السجل</span>
+                      <ImageIcon className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                      <span className="truncate">معاينة ومشاركة الصورة</span>
                     </>
                   )}
                 </button>
@@ -524,6 +646,20 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                   <span className="truncate">طباعة</span>
                 </button>
               </div>
+
+              {/* Toast Guidance Notification */}
+              {toastMessage && (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3 rounded-xl text-xs font-bold flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">{toastMessage}</div>
+                  <button 
+                    onClick={() => setToastMessage(null)}
+                    className="text-emerald-700 hover:text-emerald-950 cursor-pointer p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -712,15 +848,18 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
             </div>
           )}
 
-          {/* Months Table - Full Width with Compact Columns */}
+          {/* Months Table - Full Width with Compact Columns & Sticky First Column */}
           <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-2xs w-full bg-white">
             <div className="overflow-x-auto w-full">
-              <table className="w-full text-right border-collapse text-xs">
+              <table className="w-full min-w-[700px] text-right border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50/90 text-slate-600 font-extrabold text-[11px] border-b border-slate-100">
-                    <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right w-20 sm:w-24">الشهور</th>
+                    <th className="sticky right-0 z-20 bg-slate-50 px-2.5 py-2.5 whitespace-nowrap text-right min-w-[105px] w-28 border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)]">
+                      الشهور
+                    </th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">الاشتراك</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">المسدد</th>
+                    <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">فئة التحصيل</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">حالة السداد</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center sm:text-right">رقم الإيصال</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">صورة الإيصال</th>
@@ -741,7 +880,7 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
 
                     return (
                       <tr className={rowBg}>
-                        <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap leading-tight">
+                        <td className={`sticky right-0 z-10 ${isNeg ? 'bg-amber-50' : isPos ? 'bg-teal-50' : 'bg-slate-50'} px-2.5 py-2 whitespace-nowrap leading-tight border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)]`}>
                           <div className="flex items-center gap-1.5">
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isNeg ? 'bg-amber-500' : isPos ? 'bg-teal-500' : 'bg-slate-300'}`} />
                             <span className="font-bold text-[11px] text-slate-700">
@@ -754,6 +893,11 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                         </td>
                         <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap font-bold text-xs sm:text-[13px]">
                           {isPos ? `${initBal.toLocaleString()} ج.م` : '0 ج.م'}
+                        </td>
+                        <td className="px-2.5 py-2 whitespace-nowrap text-center text-xs">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200/80 rounded-md text-[10px] font-bold">
+                            {isCarried ? 'رصيد مرحل' : 'تسوية رصيد سابق'}
+                          </span>
                         </td>
                         <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-center">
                           {isNeg ? (
@@ -786,14 +930,14 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
 
                   {displayedMonths.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                      <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
                         لا توجد شهور مسجلة.
                       </td>
                     </tr>
                   ) : (
                     displayedMonths.map((m, idx) => (
-                      <tr key={idx} className={`hover:bg-slate-50/70 transition ${!m.isPaid ? 'bg-rose-50/20' : ''}`}>
-                        <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap leading-tight">
+                      <tr key={idx} className={`group hover:bg-slate-50/70 transition ${!m.isPaid ? 'bg-rose-50/20' : ''}`}>
+                        <td className={`sticky right-0 z-10 ${!m.isPaid ? 'bg-[#fef8f8] group-hover:bg-[#fcf2f2]' : 'bg-white group-hover:bg-slate-50'} px-2.5 py-2 whitespace-nowrap leading-tight border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)]`}>
                           <div className="font-bold text-slate-900 text-xs">
                             {monthNamesArabic[m.monthNum - 1]}
                           </div>
@@ -808,6 +952,22 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                           <span className={m.paidAmount > 0 ? 'text-emerald-600 font-black' : 'text-slate-400 font-normal'}>
                             {m.paidAmount > 0 ? `${m.paidAmount.toLocaleString()} ج.م` : '0 ج.م'}
                           </span>
+                        </td>
+                        <td className="px-2.5 py-2 whitespace-nowrap text-center text-xs">
+                          {m.matchingPayments.length > 0 ? (
+                            <div className="flex items-center justify-center flex-wrap gap-1">
+                              {Array.from(new Set(m.matchingPayments.map(p => p.paymentType || 'اشتراك شهري'))).map((type, tIdx) => (
+                                <span
+                                  key={tIdx}
+                                  className="px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200/80 rounded-md text-[10px] font-bold"
+                                >
+                                  {type}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 font-normal">—</span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-center">
                           {m.isPaid ? (
@@ -872,91 +1032,6 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
           </div>
         </div>
 
-        {/* Section: All Receipts History for this unit (Hidden in resident mode) */}
-        {!isResidentOnly && (
-          <div className="space-y-3 pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-900" />
-                  <span>سجل المدفوعات للوحدة ({unitPayments.length})</span>
-                </h3>
-                <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                  كافة التحصيلات المسجلة
-                </p>
-              </div>
-            </div>
-
-            {unitPayments.length === 0 ? (
-              <div className="py-8 bg-slate-50/50 rounded-2xl border border-slate-100 text-center text-slate-400 text-xs font-semibold">
-                لا توجد عمليات تحصيل أو إيصالات مسجلة لهذه الوحدة حتى الآن.
-              </div>
-            ) : (
-              <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-2xs w-full bg-white">
-                <div className="overflow-x-auto w-full">
-                  <table className="w-full text-right border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50/90 text-slate-600 font-extrabold text-[11px] border-b border-slate-100">
-                        <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">الشهر والسنة</th>
-                        <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">تاريخ التحصيل</th>
-                        <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">المبلغ</th>
-                        <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">فئة التحصيل</th>
-                        <th className="px-2.5 py-2 sm:px-3 sm:py-2.5 whitespace-nowrap text-center sm:text-right">رقم الإيصال</th>
-                        <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">صورة الإيصال</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
-                      {unitPayments.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-50/70 transition">
-                          <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap leading-tight">
-                            <div className="font-bold text-slate-900 text-xs">
-                              {monthNamesArabic[parseInt(p.month, 10) - 1] || p.month}
-                            </div>
-                            <div className="text-[10px] font-medium text-slate-400 leading-none mt-0.5">
-                              {p.year}
-                            </div>
-                          </td>
-                          <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-slate-500 font-normal">
-                            {p.date}
-                          </td>
-                          <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-emerald-600 font-black text-xs sm:text-[13px]">
-                            {p.amount.toLocaleString()} ج.م
-                          </td>
-                          <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-center">
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200/80 rounded-md text-[10px] font-bold">
-                              {p.paymentType}
-                            </span>
-                          </td>
-                          <td className="px-2.5 py-1.5 sm:px-3 sm:py-2 whitespace-nowrap text-center sm:text-right text-xs">
-                            <span className="font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                              {p.receiptNumber ? `#${p.receiptNumber}` : 'مسدد'}
-                            </span>
-                          </td>
-                          <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-center text-xs">
-                            {p.fileUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => onPreviewImage && onPreviewImage(p.fileUrl!)}
-                                className="inline-flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-lg text-[10px] font-bold transition cursor-pointer shadow-2xs"
-                                title="عرض صورة الإيصال"
-                              >
-                                <ImageIcon className="w-3 h-3 text-blue-600 shrink-0" />
-                                <span>عرض الإيصال</span>
-                              </button>
-                            ) : (
-                              <span className="text-slate-300 font-normal">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
       </div>
 
       {/* Printable Area for Unit Account Statement (Hidden on screen, Visible only during printing) */}
@@ -991,14 +1066,15 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
             </div>
           </div>
 
-          {/* Financial Metrics Summary */}
-          <div className="grid grid-cols-4 gap-3 border border-slate-300 rounded-xl p-4 bg-slate-50/50 mb-6 text-xs text-center">
+          {/* Financial Metrics Summary - 5 Symmetrical Metrics matching screen */}
+          <div className="grid grid-cols-5 gap-2 border border-slate-300 rounded-xl p-3 bg-slate-50/50 mb-4 text-xs text-center">
             <div className="space-y-1">
-              <span className="font-bold text-slate-500 block">الاشتراك الشهري</span>
+              <span className="font-bold text-slate-500 block text-[11px]">الاشتراك الشهري</span>
               <div className="text-sm font-black text-slate-800">{financials.monthlyFee.toLocaleString()} ج.م</div>
+              <span className="text-[9px] text-slate-400 block font-semibold">مبلغ الاشتراك المعتمد</span>
             </div>
             <div className="space-y-1 border-r border-slate-300">
-              <span className="font-bold text-slate-500 block">رصيد سابق مرحل</span>
+              <span className="font-bold text-slate-500 block text-[11px]">رصيد سابق مرحل</span>
               <div className="text-sm font-black text-slate-800">
                 {effectiveCarriedBalance < 0 
                   ? `-${Math.abs(effectiveCarriedBalance).toLocaleString()} ج.م` 
@@ -1006,13 +1082,22 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                   ? `+${effectiveCarriedBalance.toLocaleString()} ج.م` 
                   : '0 ج.م'}
               </div>
+              <span className="text-[9px] text-slate-400 block font-semibold">
+                {effectiveCarriedBalance < 0 ? 'مديونية سابقة' : effectiveCarriedBalance > 0 ? 'رصيد دائن فائض' : 'لا يوجد رصيد سابق'}
+              </span>
             </div>
             <div className="space-y-1 border-r border-slate-300">
-              <span className="font-bold text-slate-500 block">إجمالي التحصيلات</span>
+              <span className="font-bold text-slate-500 block text-[11px]">إجمالي المطلوب حتى تاريخه</span>
+              <div className="text-sm font-black text-blue-900">{financials.expectedDues.toLocaleString()} ج.م</div>
+              <span className="text-[9px] text-slate-400 block font-semibold">{financials.monthsElapsed} شهر حتى اليوم</span>
+            </div>
+            <div className="space-y-1 border-r border-slate-300">
+              <span className="font-bold text-slate-500 block text-[11px]">إجمالي المسدد فعلياً</span>
               <div className="text-sm font-black text-emerald-700">{financials.totalPaid.toLocaleString()} ج.م</div>
+              <span className="text-[9px] text-slate-400 block font-semibold">{unitPayments.length} عملية سداد</span>
             </div>
             <div className="space-y-1 border-r border-slate-300">
-              <span className="font-bold text-slate-500 block">الموقف المالي الختامي</span>
+              <span className="font-bold text-slate-500 block text-[11px]">الموقف المالي الختامي</span>
               <div className={`text-sm font-black ${financials.netBalance < 0 ? 'text-red-700' : financials.netBalance > 0 ? 'text-emerald-700' : 'text-blue-900'}`}>
                 {financials.netBalance < 0 
                   ? `مديونية: -${Math.round(Math.abs(financials.netBalance)).toLocaleString()} ج.م` 
@@ -1020,8 +1105,27 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                   ? `رصيد دائن: +${Math.round(financials.netBalance).toLocaleString()} ج.م` 
                   : 'مسدد بالكامل ✨'}
               </div>
+              <span className="text-[9px] text-slate-400 block font-semibold">الرصيد الصافي للوحدة</span>
             </div>
           </div>
+
+          {/* Notice Banner matching on-screen status */}
+          {financials.netBalance < 0 ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-right text-xs mb-5 text-red-950 font-bold flex items-center justify-between">
+              <span>⚠️ تنبيه الموقف المالي: على الوحدة مديونية متأخرة مستحقة السداد بقيمة {Math.abs(Math.round(financials.netBalance)).toLocaleString()} ج.م تشمل ({unpaidMonthsList.length}) شهر غير مدفوع {effectiveCarriedBalance < 0 ? `بالإضافة لرصيد مديونية مرحل (${Math.abs(effectiveCarriedBalance).toLocaleString()} ج.م)` : ''}.</span>
+              <span className="text-red-700 font-black text-xs px-2 py-0.5 bg-red-100 rounded-lg">مطلوب السداد</span>
+            </div>
+          ) : financials.netBalance === 0 ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-right text-xs mb-5 text-emerald-950 font-bold flex items-center justify-between">
+              <span>✨ الموقف المالي: تم سداد جميع اشتراكات ومستحقات الوحدة بالكامل حتى تاريخه ولا توجد أي مديونيات متأخرة.</span>
+              <span className="text-emerald-800 font-black text-xs px-2 py-0.5 bg-emerald-100 rounded-lg">مسدد بالكامل</span>
+            </div>
+          ) : (
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 text-right text-xs mb-5 text-teal-950 font-bold flex items-center justify-between">
+              <span>🎉 الموقف المالي: يوجد رصيد إضافي مسدد مقدماً بقيمة {Math.round(financials.netBalance).toLocaleString()} ج.م سيتم خصمه تلقائياً من اشتراكات الشهور القادمة.</span>
+              <span className="text-teal-800 font-black text-xs px-2 py-0.5 bg-teal-100 rounded-lg">رصيد دائن فائض</span>
+            </div>
+          )}
 
           {/* Monthly Accounting Timeline Table */}
           <h2 className="font-black text-slate-800 text-xs mb-2">جدول المحاسبة والمطالبات الشهري ({monthsTimeline.length} شهر)</h2>
@@ -1031,35 +1135,88 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                 <th className="border border-slate-400 p-2">الشهر والسنة</th>
                 <th className="border border-slate-400 p-2 text-center">قيمة الاشتراك</th>
                 <th className="border border-slate-400 p-2 text-center">المبلغ المسدد</th>
+                <th className="border border-slate-400 p-2 text-center">فئة التحصيل</th>
                 <th className="border border-slate-400 p-2 text-center">حالة السداد</th>
                 <th className="border border-slate-400 p-2 text-center">تفاصيل التحصيل ورقم الإيصال</th>
               </tr>
             </thead>
             <tbody>
-              {monthsTimeline.map((m) => (
-                <tr key={`${m.year}-${m.monthNum}`} className="border-b border-slate-300">
-                  <td className="border border-slate-300 p-2 font-bold text-slate-800">{m.monthLabel}</td>
-                  <td className="border border-slate-300 p-2 text-center font-semibold">{m.fee.toLocaleString()} ج.م</td>
-                  <td className="border border-slate-300 p-2 text-center font-bold text-emerald-700">
-                    {m.paidAmount > 0 ? `${m.paidAmount.toLocaleString()} ج.م` : '—'}
-                  </td>
-                  <td className={`border border-slate-300 p-2 text-center font-bold ${m.isPaid ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
-                    {m.isPaid ? 'مكتمل / مسدد' : 'غير مسدد / متأخر'}
-                  </td>
-                  <td className="border border-slate-300 p-2 text-center text-[11px] text-slate-600">
-                    {m.matchingPayments.length > 0 
-                      ? m.matchingPayments.map(p => `إيصال #${p.receiptNumber || '—'} بتاريخ ${p.date}`).join(' | ')
-                      : '—'}
-                  </td>
-                </tr>
-              ))}
+              {/* Row for Carried Previous Balance */}
+              {(() => {
+                const initBal = effectiveCarriedBalance;
+                const isNeg = initBal < 0;
+                const isPos = initBal > 0;
+                const isCarried = currentYear > startYear;
+                return (
+                  <tr className={isNeg ? 'bg-amber-50/70 font-bold' : isPos ? 'bg-teal-50/70 font-bold' : 'bg-slate-50/70'}>
+                    <td className="border border-slate-400 p-2 font-black text-slate-800">
+                      {isCarried ? `رصيد سابق مرحل (${currentYear - 1})` : 'رصيد سابق'}
+                    </td>
+                    <td className="border border-slate-400 p-2 text-center font-bold">
+                      {isNeg ? `${Math.abs(initBal).toLocaleString()} ج.م` : '0 ج.م'}
+                    </td>
+                    <td className="border border-slate-400 p-2 text-center font-bold text-teal-700">
+                      {isPos ? `${initBal.toLocaleString()} ج.م` : '0 ج.م'}
+                    </td>
+                    <td className="border border-slate-400 p-2 text-center text-xs font-bold text-slate-700">
+                      {isCarried ? 'رصيد مرحل' : 'تسوية رصيد سابق'}
+                    </td>
+                    <td className="border border-slate-400 p-2 text-center font-bold">
+                      {isNeg ? (
+                        <span className="text-amber-800 font-black">مديونية سابقة</span>
+                      ) : isPos ? (
+                        <span className="text-teal-800 font-black">رصيد دائن فائض</span>
+                      ) : (
+                        <span className="text-slate-500">لا يوجد (0 ج.م)</span>
+                      )}
+                    </td>
+                    <td className="border border-slate-400 p-2 text-center text-slate-600">
+                      {isCarried ? 'مرحل تلقائياً من السنة السابقة' : (isNeg ? 'مديونية سابقة معتمدة' : isPos ? 'رصيد دائن مرحل' : '—')}
+                    </td>
+                  </tr>
+                );
+              })()}
+
+              {/* Monthly breakdown rows */}
+              {monthsTimeline.map((m) => {
+                const isPartial = m.paidAmount > 0 && !m.isPaid;
+                const isUnpaid = m.paidAmount === 0 && !m.isPaid;
+                return (
+                  <tr key={`${m.year}-${m.monthNum}`} className={`border-b border-slate-300 ${isUnpaid ? 'bg-rose-50/40' : isPartial ? 'bg-amber-50/40' : ''}`}>
+                    <td className="border border-slate-300 p-2 font-bold text-slate-800">{m.monthLabel}</td>
+                    <td className="border border-slate-300 p-2 text-center font-semibold">{m.fee.toLocaleString()} ج.م</td>
+                    <td className="border border-slate-300 p-2 text-center font-bold text-emerald-700">
+                      {m.paidAmount > 0 ? `${m.paidAmount.toLocaleString()} ج.م` : '0 ج.م'}
+                    </td>
+                    <td className="border border-slate-300 p-2 text-center text-xs font-semibold text-slate-700">
+                      {m.matchingPayments.length > 0 
+                        ? Array.from(new Set(m.matchingPayments.map(p => p.paymentType || 'اشتراك شهري'))).join(' ، ')
+                        : '—'}
+                    </td>
+                    <td className={`border border-slate-300 p-2 text-center font-bold ${
+                      m.isPaid 
+                        ? 'bg-emerald-50 text-emerald-800' 
+                        : isPartial 
+                        ? 'bg-amber-50 text-amber-800' 
+                        : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {m.isPaid ? 'مدفوع بالكامل' : isPartial ? `سداد جزئي (${m.paidAmount} من ${m.fee} ج.م)` : 'غير مدفوع'}
+                    </td>
+                    <td className="border border-slate-300 p-2 text-center text-[11px] text-slate-700">
+                      {m.matchingPayments.length > 0 
+                        ? m.matchingPayments.map(p => `إيصال #${p.receiptNumber || 'مسدد'} (${p.date})`).join(' | ')
+                        : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
           {/* Payments & Receipts Log Table */}
           {unitPayments.length > 0 && (
             <>
-              <h2 className="font-black text-slate-800 text-xs mb-2">سجل المدفوعات للوحدة ({unitPayments.length})</h2>
+              <h2 className="font-black text-slate-800 text-xs mb-2">سجل مدفوعات وتحصيلات الوحدة ({unitPayments.length})</h2>
               <table className="w-full text-right border-collapse border border-slate-400 text-xs mb-6">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-400">
@@ -1090,24 +1247,143 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
           )}
 
           {/* Signatures Area */}
-          <div className="grid grid-cols-3 gap-8 mt-12 text-center text-xs font-bold text-slate-800 pt-6 border-t border-dashed border-slate-300">
-            <div className="space-y-12">
+          <div className="grid grid-cols-3 gap-8 mt-10 text-center text-xs font-bold text-slate-800 pt-6 border-t border-dashed border-slate-300">
+            <div className="space-y-10">
               <span>أمين الصندوق</span>
               <div className="border-b border-slate-400 w-32 mx-auto"></div>
             </div>
-            <div className="space-y-12">
+            <div className="space-y-10">
               <span>رئيس اتحاد الملاك</span>
               <div className="border-b border-slate-400 w-32 mx-auto"></div>
             </div>
-            <div className="space-y-12">
+            <div className="space-y-10">
               <span>خاتم الاتحاد والتاريخ</span>
               <div className="border-b border-slate-400 w-32 mx-auto"></div>
             </div>
           </div>
 
           {/* Page Footer */}
-          <div className="mt-16 text-center text-[10px] text-slate-400 font-semibold">
+          <div className="mt-12 text-center text-[10px] text-slate-400 font-semibold">
             تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة عمارة بيراميدز فيو ١
+          </div>
+        </div>
+      )}
+
+      {/* Statement Image Preview & Direct Sharing Modal */}
+      {isShareModalOpen && generatedImageResult && activeResident && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-900 text-white flex items-center justify-center shrink-0">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    صورة كشف حساب واشتراكات الوحدة ({activeResident.flatNumber})
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold">
+                    المالك: {activeResident.name} | التقرير متزامن ومطابق تماماً لبيانات الوحدة
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
+                title="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Image Preview Area */}
+            <div className="p-4 sm:p-5 max-h-[50vh] overflow-y-auto bg-slate-100/70 text-center border-b border-slate-100">
+              <img
+                src={generatedImageResult.dataUrl}
+                alt={`كشف حساب وحدة ${activeResident.flatNumber}`}
+                className="mx-auto rounded-xl shadow-md border border-slate-300 max-w-full h-auto"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="p-4 sm:p-5 bg-white space-y-3">
+              <div className="text-xs font-black text-slate-700 mb-1">
+                خيارات المشاركة والحفظ المباشر:
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Share to Owner WhatsApp */}
+                <button
+                  onClick={() => handleShareWhatsApp('owner', true)}
+                  className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Share2 className="w-4 h-4 shrink-0" />
+                  <span>مشاركة الصورة عبر واتساب المالك</span>
+                </button>
+
+                {/* Share to Tenant WhatsApp (if rental) or Copy Button */}
+                {activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone ? (
+                  <button
+                    onClick={() => handleShareWhatsApp('tenant', true)}
+                    className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    <Share2 className="w-4 h-4 shrink-0" />
+                    <span>مشاركة الصورة عبر واتساب المستأجر</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCopyImageToClipboard}
+                    className="w-full py-3 px-3 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-2xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>تم نسخ الصورة للحافظة!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 shrink-0" />
+                        <span>نسخ الصورة للحافظة (لصق في الواتساب)</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Copy Image Button if tenant exists */}
+                {activeResident.ownershipType === 'إيجار' && activeResident.tenantPhone && (
+                  <button
+                    onClick={handleCopyImageToClipboard}
+                    className="w-full py-3 px-3 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-2xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>تم نسخ الصورة للحافظة!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 shrink-0" />
+                        <span>نسخ الصورة للحافظة (لصق في الواتساب)</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Download Image Button */}
+                <button
+                  onClick={() => generatedImageResult.download()}
+                  className="w-full py-3 px-3 bg-slate-900 hover:bg-slate-950 text-white rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-4 h-4 text-amber-300 shrink-0" />
+                  <span>تحميل الصورة لجهازك (PNG)</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 font-medium text-center pt-1">
+                💡 يمكنك النقر على &quot;مشاركة عبر الواتساب&quot; لإرسال الصورة وتفاصيل الحساب مباشرة لرقم هاتف الوحدة، أو نسخها ولصقها في أي محادثة فوراً.
+              </p>
+            </div>
           </div>
         </div>
       )}

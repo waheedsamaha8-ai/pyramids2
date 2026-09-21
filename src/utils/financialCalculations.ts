@@ -1,4 +1,5 @@
 import { Resident, Payment, AppConfig } from '../types';
+import { isSameFlatNumber } from './buildingStructure';
 
 /**
  * Determines the effective monthly fee for a resident
@@ -64,7 +65,7 @@ export function getCarriedPreviousBalance(
   // Sum payments made before targetYear
   const paymentsPrior = payments
     .filter(p => {
-      const matchUnit = String(p.flatNumber).trim() === String(resident.flatNumber).trim() || (p.residentId && p.residentId === resident.id);
+      const matchUnit = isSameFlatNumber(p.flatNumber, resident.flatNumber) || (p.residentId && p.residentId === resident.id);
       if (!matchUnit) return false;
       const pYear = Number(p.year) || (p.date ? new Date(p.date).getFullYear() : startYear);
       return pYear < targetYear;
@@ -133,7 +134,7 @@ export function calculateResidentFinancials(
     // Payments in targetYear
     const totalPaid = payments
       .filter(p => {
-        const matchUnit = String(p.flatNumber).trim() === String(resident.flatNumber).trim() || (p.residentId && p.residentId === resident.id);
+        const matchUnit = isSameFlatNumber(p.flatNumber, resident.flatNumber) || (p.residentId && p.residentId === resident.id);
         if (!matchUnit) return false;
         const pYear = Number(p.year) || (p.date ? new Date(p.date).getFullYear() : startYear);
         return pYear === targetYear;
@@ -173,7 +174,7 @@ export function calculateResidentFinancials(
   const expectedDues = (monthsElapsed * fee) - initialBal;
 
   const totalPaid = payments
-    .filter(p => String(p.flatNumber).trim() === String(resident.flatNumber).trim() || (p.residentId && p.residentId === resident.id))
+    .filter(p => isSameFlatNumber(p.flatNumber, resident.flatNumber) || (p.residentId && p.residentId === resident.id))
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
   const netBalance = totalPaid - expectedDues;

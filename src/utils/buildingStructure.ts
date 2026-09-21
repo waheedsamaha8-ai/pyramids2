@@ -83,7 +83,15 @@ export function compareFlatNumbers(a: number | string | undefined | null, b: num
  */
 export function isSameFlatNumber(a: number | string | undefined | null, b: number | string | undefined | null): boolean {
   if (a === undefined || a === null || b === undefined || b === null) return false;
-  return String(a).trim() === String(b).trim();
+  const strA = String(a).trim();
+  const strB = String(b).trim();
+  if (strA === strB) return true;
+  const parsedA = parseFlatNumber(a);
+  const parsedB = parseFlatNumber(b);
+  if (parsedA.main !== 999999 && parsedB.main !== 999999) {
+    return parsedA.main === parsedB.main && parsedA.sub === parsedB.sub;
+  }
+  return false;
 }
 
 /**
