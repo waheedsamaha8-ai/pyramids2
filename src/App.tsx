@@ -312,6 +312,19 @@ export default function App() {
     }
   }, [activeTab]);
 
+  // Sync residents to server for backend auth verification
+  useEffect(() => {
+    if (residents && residents.length > 0) {
+      try {
+        fetch('/api/residents/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ residents }),
+        }).catch(() => {});
+      } catch {}
+    }
+  }, [residents]);
+
   const [selectedActivityModal, setSelectedActivityModal] = useState<string | null>(null);
   const [maintenanceSubTab, setMaintenanceSubTab] = useState<'requests' | 'directory'>('requests');
   const [chatSubTab, setChatSubTab] = useState<'room' | 'complaints'>('room');

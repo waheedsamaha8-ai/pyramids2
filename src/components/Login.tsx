@@ -559,306 +559,91 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         )}
 
         {/* ========================================================================= */}
-        {/* MODE 3: RESIDENTS & TENANTS PORTAL (دخول وتسجيل السكان والمستأجرين)         */}
+        {/* MODE 3: RESIDENTS & TENANTS PORTAL (دخول السكان والمستأجرين)                */}
         {/* ========================================================================= */}
         {portalMode === 'RESIDENT' && (
           <div className="space-y-4">
-            {/* Sub-tabs: Login vs Register Resident */}
-            <div className="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4 text-xs font-black">
-              <button
-                type="button"
-                onClick={() => {
-                  setResidentTab('login');
-                  setError(null);
-                }}
-                className={`py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  residentTab === 'login'
-                    ? 'bg-white dark:bg-[#111a2e] text-blue-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>دخول الساكن / المستأجر</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setResidentTab('register');
-                  setError(null);
-                }}
-                className={`py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  residentTab === 'register'
-                    ? 'bg-white dark:bg-[#111a2e] text-blue-900 dark:text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>طلب انضمام وحدة جديدة</span>
-              </button>
+            <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl text-xs text-blue-950 dark:text-blue-300 font-bold leading-relaxed flex items-start gap-2">
+              <Mail className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div>
+                أدخل البريد الإلكتروني وكلمة المرور المخصصة لسيادتكم في دعوة الانضمام المرسلة عبر الواتساب من قبل رئيس الاتحاد والدخول المباشر.
+              </div>
             </div>
 
-            {residentTab === 'login' ? (
-              <form onSubmit={handleEmailLogin} className="space-y-3.5">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">البريد الإلكتروني للساكن</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Mail className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="email"
-                      required
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="name@example.com"
-                      className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
+            <form onSubmit={handleEmailLogin} className="space-y-3.5">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">البريد الإلكتروني للساكن / المستأجر</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                    <Mail className="h-4 w-4 text-slate-400" />
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="name@example.com أو flat101@pyramids.com"
+                    className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
+                  />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">كلمة المرور</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Lock className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="password"
-                      required
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">كلمة المرور</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 text-slate-400" />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-4 pr-10 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
+                  />
                 </div>
+              </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-sm font-black transition active:scale-[0.99] shadow-md shadow-blue-900/10 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4" />
-                      <span>تسجيل دخول الساكن</span>
-                    </>
-                  )}
-                </button>
-
-                <div className="relative my-4 flex items-center justify-center">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
-                  </div>
-                  <span className="relative px-3 bg-white dark:bg-[#111a2e] text-slate-400 text-[11px] font-bold">أو الدخول عبر Google</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition font-black text-xs text-slate-700 dark:text-slate-200 shadow-xs disabled:opacity-50 cursor-pointer"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                    <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                      <path fill="#EA4335" d="M20.64 12.2c0-.7-.06-1.36-.18-2H12v3.78h4.84c-.2.11-.2.22-.3.43-.54 1.45-1.8 2.5-3.32 2.5a5.18 5.18 0 0 1-4.85-3.6l-2.63 2.03A10.3 10.3 0 0 0 12 22.36c5.73 0 10.55-1.9 14.07-5.18l-5.43-4.98z" />
-                      <path fill="#4285F4" d="M12 22.36c3.24 0 5.95-1.07 7.93-2.91l-5.43-4.98c-1.5.11-3.04-.15-4.21-.86a5.18 5.18 0 0 1-3.3-3.6L4.35 12.04a10.3 10.3 0 0 0 7.65 10.32z" />
-                      <path fill="#FBBC05" d="M4.35 12.04c-.25-.75-.4-1.55-.4-2.38s.15-1.63.4-2.38L1.72 5.25A10.3 10.3 0 0 0 0 9.66c0 1.63.3 3.19.85 4.63l3.5-3.25z" />
-                      <path fill="#34A853" d="M12 4.14c1.76 0 3.3.61 4.54 1.8l3.4-3.15C17.9 1.07 15.24 0 12 0 7.34 0 3.3 2.7 1.25 6.64l3.5 3.25A5.18 5.18 0 0 1 12 4.14z" />
-                    </g>
-                  </svg>
-                  <span>الدخول بحساب Google المسجل بالاتحاد</span>
-                </button>
-              </form>
-            ) : (
-              /* Resident Join Request Form */
-              <form onSubmit={handleJoinRequestSubmit} className="space-y-3">
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">رقم الشقة / الوحدة</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <Building className="h-4 w-4 text-slate-400" />
-                      </span>
-                      <input
-                        type="number"
-                        required
-                        placeholder="مثال: 101"
-                        value={flatNumber}
-                        onChange={(e) => setFlatNumber(e.target.value)}
-                        className="w-full pl-2 pr-9 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-bold dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">صفة الساكن</label>
-                    <div className="grid grid-cols-2 gap-1.5 mt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setResidentType('OWNER')}
-                        className={`py-2 text-xs font-black rounded-xl border-2 transition cursor-pointer ${
-                          residentType === 'OWNER'
-                            ? 'border-blue-900 bg-blue-50 text-blue-950 dark:bg-blue-900/40 dark:text-white'
-                            : 'border-slate-100 dark:border-slate-700 text-slate-500 hover:bg-slate-50'
-                        }`}
-                      >
-                        مالك الوحدة
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setResidentType('TENANT')}
-                        className={`py-2 text-xs font-black rounded-xl border-2 transition cursor-pointer ${
-                          residentType === 'TENANT'
-                            ? 'border-blue-900 bg-blue-50 text-blue-950 dark:bg-blue-900/40 dark:text-white'
-                            : 'border-slate-100 dark:border-slate-700 text-slate-500 hover:bg-slate-50'
-                        }`}
-                      >
-                        مستأجر
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dynamic Inputs based on Owner / Tenant */}
-                {residentType === 'OWNER' ? (
-                  <div className="space-y-2.5">
-                    <div>
-                      <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">اسم المالك بالكامل</label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                          <User className="h-4 w-4 text-slate-400" />
-                        </span>
-                        <input
-                          type="text"
-                          required
-                          value={ownerName}
-                          onChange={(e) => setOwnerName(e.target.value)}
-                          placeholder="الاسم كما بالهوية"
-                          className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">رقم الهاتف المرتبط بالواتساب</label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                          <Phone className="h-4 w-4 text-slate-400" />
-                        </span>
-                        <input
-                          type="tel"
-                          required
-                          value={ownerPhone}
-                          onChange={(e) => setOwnerPhone(normalizePhoneInput(e.target.value))}
-                          onBlur={() => setOwnerPhone(formatMobileNumber(ownerPhone))}
-                          placeholder="مثال: 01012345678 أو +966539313467"
-                          className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-mono font-bold dark:text-white placeholder:text-right placeholder:font-sans"
-                          dir="ltr"
-                        />
-                      </div>
-                    </div>
-                  </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-sm font-black transition active:scale-[0.99] shadow-md shadow-blue-900/10 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
-                  <div className="space-y-2.5">
-                    <div>
-                      <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">اسم المستأجر بالكامل</label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                          <User className="h-4 w-4 text-slate-400" />
-                        </span>
-                        <input
-                          type="text"
-                          required
-                          value={tenantName}
-                          onChange={(e) => setTenantName(e.target.value)}
-                          placeholder="اسم الساكن المستأجر"
-                          className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">واتساب المستأجر</label>
-                        <input
-                          type="tel"
-                          required
-                          value={tenantPhone}
-                          onChange={(e) => setTenantPhone(normalizePhoneInput(e.target.value))}
-                          onBlur={() => setTenantPhone(formatMobileNumber(tenantPhone))}
-                          placeholder="010... أو +966539313467"
-                          className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-mono font-bold dark:text-white placeholder:text-right placeholder:font-sans"
-                          dir="ltr"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">اسم مالك الشقة</label>
-                        <input
-                          type="text"
-                          required
-                          value={ownerName}
-                          onChange={(e) => setOwnerName(e.target.value)}
-                          placeholder="اسم المالك"
-                          className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>تسجيل دخول الساكن</span>
+                  </>
                 )}
+              </button>
 
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">البريد الإلكتروني المطلوب للتسجيل</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Mail className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="email"
-                      required
-                      value={registerEmail}
-                      onChange={(e) => setRegisterEmail(e.target.value)}
-                      placeholder="name@example.com"
-                      className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
+              <div className="relative my-4 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
                 </div>
+                <span className="relative px-3 bg-white dark:bg-[#111a2e] text-slate-400 text-[11px] font-bold">أو الدخول عبر Google</span>
+              </div>
 
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 text-xs font-bold mb-1 text-right">كلمة المرور المطلوبة</label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                      <Lock className="h-4 w-4 text-slate-400" />
-                    </span>
-                    <input
-                      type="password"
-                      required
-                      value={registerPassword}
-                      onChange={(e) => setRegisterPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-right font-medium dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-sm font-black transition active:scale-[0.99] shadow-md shadow-blue-900/10 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4" />
-                      <span>إرسال طلب الانضمام لاعتماده من رئيس الاتحاد</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition font-black text-xs text-slate-700 dark:text-slate-200 shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                  <g transform="matrix(1, 0, 0, 1, 0, 0)">
+                    <path fill="#EA4335" d="M20.64 12.2c0-.7-.06-1.36-.18-2H12v3.78h4.84c-.2.11-.2.22-.3.43-.54 1.45-1.8 2.5-3.32 2.5a5.18 5.18 0 0 1-4.85-3.6l-2.63 2.03A10.3 10.3 0 0 0 12 22.36c5.73 0 10.55-1.9 14.07-5.18l-5.43-4.98z" />
+                    <path fill="#4285F4" d="M12 22.36c3.24 0 5.95-1.07 7.93-2.91l-5.43-4.98c-1.5.11-3.04-.15-4.21-.86a5.18 5.18 0 0 1-3.3-3.6L4.35 12.04a10.3 10.3 0 0 0 7.65 10.32z" />
+                    <path fill="#FBBC05" d="M4.35 12.04c-.25-.75-.4-1.55-.4-2.38s.15-1.63.4-2.38L1.72 5.25A10.3 10.3 0 0 0 0 9.66c0 1.63.3 3.19.85 4.63l3.5-3.25z" />
+                    <path fill="#34A853" d="M12 4.14c1.76 0 3.3.61 4.54 1.8l3.4-3.15C17.9 1.07 15.24 0 12 0 7.34 0 3.3 2.7 1.25 6.64l3.5 3.25A5.18 5.18 0 0 1 12 4.14z" />
+                  </g>
+                </svg>
+                <span>الدخول بحساب Google المسجل بالاتحاد</span>
+              </button>
+            </form>
           </div>
         )}
 

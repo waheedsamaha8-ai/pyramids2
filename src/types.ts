@@ -41,6 +41,14 @@ export interface Resident {
   tenantPhone?: string;
   monthlyFee?: number;
   initialBalance?: number;
+  // Account Credentials & WhatsApp Invitations
+  email?: string;
+  password?: string;
+  accountStatus?: 'ACTIVE' | 'INVITED' | 'REVOKED';
+  tenantEmail?: string;
+  tenantPassword?: string;
+  tenantAccountStatus?: 'ACTIVE' | 'INVITED' | 'REVOKED';
+  lastLoginAt?: string;
 }
 
 export interface Payment {

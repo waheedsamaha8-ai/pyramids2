@@ -285,6 +285,21 @@ async function startServer() {
     }
   });
 
+  // Sync Residents List to Server
+  app.post('/api/residents/sync', async (req, res) => {
+    try {
+      const { residents } = req.body;
+      if (Array.isArray(residents)) {
+        const RESIDENTS_FILE = path.join(process.cwd(), 'residents.json');
+        await fs.promises.writeFile(RESIDENTS_FILE, JSON.stringify(residents, null, 2), 'utf8');
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error syncing residents on server:', err);
+      res.status(500).json({ error: 'فشل مزامنة بيانات السكان على الخادم.' });
+    }
+  });
+
   // 4. Custom Login with Email & Password
   app.post('/api/login-email', async (req, res) => {
     try {
@@ -347,6 +362,50 @@ async function startServer() {
           name: 'ساكن تجريبي (وحدة 101)',
           residentType: 'OWNER',
         });
+      }
+
+      // Check residents list (assigned credentials)
+      try {
+        const RESIDENTS_FILE = path.join(process.cwd(), 'residents.json');
+        if (fs.existsSync(RESIDENTS_FILE)) {
+          const raw = await fs.promises.readFile(RESIDENTS_FILE, 'utf8');
+          const residentsList = JSON.parse(raw);
+          for (const r of residentsList) {
+            const ownerEmailMatch = (r.email && r.email.toLowerCase().trim() === lowerEmail) || `flat${r.flatNumber}@pyramids.com` === lowerEmail;
+            const ownerPassMatch = (r.password && r.password === password) || `pyr${r.flatNumber}#2026` === password || `flat${r.flatNumber}123` === password;
+            if (ownerEmailMatch && ownerPassMatch) {
+              if (r.accountStatus === 'REVOKED') {
+                return res.status(403).json({ error: 'تم إلغاء عضوية هذا الحساب من قبل رئيس الاتحاد. يرجى التواصل مع إدارة الملاك.' });
+              }
+              return res.json({
+                success: true,
+                role: 'RESIDENT',
+                flatNumber: r.flatNumber,
+                email: r.email || `flat${r.flatNumber}@pyramids.com`,
+                name: r.name || `ساكن وحدة ${r.flatNumber}`,
+                residentType: 'OWNER',
+              });
+            }
+
+            const tenantEmailMatch = (r.tenantEmail && r.tenantEmail.toLowerCase().trim() === lowerEmail) || `tenant${r.flatNumber}@pyramids.com` === lowerEmail;
+            const tenantPassMatch = (r.tenantPassword && r.tenantPassword === password) || `pyr${r.flatNumber}#2026` === password || `flat${r.flatNumber}123` === password;
+            if (tenantEmailMatch && tenantPassMatch) {
+              if (r.tenantAccountStatus === 'REVOKED') {
+                return res.status(403).json({ error: 'تم إلغاء عضوية هذا الحساب من قبل رئيس الاتحاد. يرجى التواصل مع إدارة الملاك.' });
+              }
+              return res.json({
+                success: true,
+                role: 'RESIDENT',
+                flatNumber: r.flatNumber,
+                email: r.tenantEmail || `tenant${r.flatNumber}@pyramids.com`,
+                name: r.tenantName || r.name || `مستأجر وحدة ${r.flatNumber}`,
+                residentType: 'TENANT',
+              });
+            }
+          }
+        }
+      } catch (resErr) {
+        console.error('Error reading residents.json in server login:', resErr);
       }
 
       const requests = await getJoinRequests();

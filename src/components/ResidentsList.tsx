@@ -224,6 +224,10 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
   const [monthlyFee, setMonthlyFee] = useState<number | ''>(400);
   const [initialBalanceType, setInitialBalanceType] = useState<'debt' | 'surplus' | 'none'>('none');
   const [initialBalanceVal, setInitialBalanceVal] = useState<number | ''>('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [tenantEmail, setTenantEmail] = useState('');
+  const [tenantPassword, setTenantPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const filteredResidents = residents.filter(
@@ -302,6 +306,10 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
     setMonthlyFee(getDefaultFeeForActivity(defaultAct));
     setInitialBalanceType('none');
     setInitialBalanceVal('');
+    setEmail('');
+    setPassword('');
+    setTenantEmail('');
+    setTenantPassword('');
     setError(null);
     setShowModal(true);
   };
@@ -333,9 +341,89 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
       setInitialBalanceType('none');
       setInitialBalanceVal('');
     }
+
+    setEmail(resident.email || `flat${resident.flatNumber}@pyramids.com`);
+    setPassword(resident.password || `pyr${resident.flatNumber}#2026`);
+    setTenantEmail(resident.tenantEmail || `tenant${resident.flatNumber}@pyramids.com`);
+    setTenantPassword(resident.tenantPassword || `pyr${resident.flatNumber}#2026`);
     
     setError(null);
     setShowModal(true);
+  };
+
+  const handleSendWhatsAppInvite = (resident: Resident, targetType: 'OWNER' | 'TENANT' = 'OWNER') => {
+    const isTenant = targetType === 'TENANT';
+    const recipientName = isTenant ? (resident.tenantName || resident.name) : resident.name;
+    const rawPhone = isTenant ? (resident.tenantPhone || resident.phone) : resident.phone;
+    const resEmail = isTenant 
+      ? (resident.tenantEmail || `tenant${resident.flatNumber}@pyramids.com`)
+      : (resident.email || `flat${resident.flatNumber}@pyramids.com`);
+    const resPassword = isTenant
+      ? (resident.tenantPassword || `pyr${resident.flatNumber}#2026`)
+      : (resident.password || `pyr${resident.flatNumber}#2026`);
+
+    const cleanPhone = rawPhone ? formatMobileNumber(rawPhone).replace(/[^\d+]/g, '') : '';
+    const appUrl = window.location.origin;
+
+    const message = `مرحباً بك أستاذ/ة ${recipientName} 👋
+
+يسرنا دعوة سيادتكم للانضمام إلى تطبيق اتحاد ملاك العمارة لمتابعة الخدمات والتحصيلات والتواصل.
+
+بيانات دخولك المخصصة للتطبيق:
+📍 رقم الشقة: ${resident.flatNumber}
+👤 الاسم: ${recipientName}
+✉️ البريد الإلكتروني: ${resEmail}
+🔑 كلمة المرور: ${resPassword}
+
+رابط دخول التطبيق:
+${appUrl}
+
+نتمنى لك تجربة متميزة!`;
+
+    // Mark status as INVITED
+    const updatedRes = { ...resident };
+    if (isTenant) {
+      updatedRes.tenantAccountStatus = 'INVITED';
+    } else {
+      updatedRes.accountStatus = 'INVITED';
+    }
+    onEdit(updatedRes);
+
+    if (cleanPhone) {
+      const waUrl = `https://wa.me/${cleanPhone.startsWith('+') ? cleanPhone.slice(1) : cleanPhone}?text=${encodeURIComponent(message)}`;
+      window.open(waUrl, '_blank');
+    } else {
+      navigator.clipboard.writeText(message);
+      setToastMsg(`تم نسخ رسالة الدعوة وبيانات الدخول للساكن بنجاح! يمكنك إرسالها عبر الواتساب.`);
+    }
+  };
+
+  const handleCopyCredentials = (resident: Resident, targetType: 'OWNER' | 'TENANT' = 'OWNER') => {
+    const isTenant = targetType === 'TENANT';
+    const resEmail = isTenant 
+      ? (resident.tenantEmail || `tenant${resident.flatNumber}@pyramids.com`)
+      : (resident.email || `flat${resident.flatNumber}@pyramids.com`);
+    const resPassword = isTenant
+      ? (resident.tenantPassword || `pyr${resident.flatNumber}#2026`)
+      : (resident.password || `pyr${resident.flatNumber}#2026`);
+
+    const textToCopy = `البريد الإلكتروني: ${resEmail}\nكلمة المرور: ${resPassword}`;
+    navigator.clipboard.writeText(textToCopy);
+    setToastMsg(`تم نسخ بيانات الدخول للوحدة ${resident.flatNumber} إلى الحافظة!`);
+  };
+
+  const handleToggleRevokeMembership = (resident: Resident, newStatus: 'ACTIVE' | 'REVOKED') => {
+    const updated: Resident = {
+      ...resident,
+      accountStatus: newStatus,
+      tenantAccountStatus: resident.ownershipType === 'إيجار' ? newStatus : resident.tenantAccountStatus,
+    };
+    onEdit(updated);
+    if (newStatus === 'REVOKED') {
+      setToastMsg(`تم إلغاء عضوية الساكن بوحدة ${resident.flatNumber} وحظر دخوله بنجاح.`);
+    } else {
+      setToastMsg(`تم إعادة تفعيل عضوية الساكن بوحدة ${resident.flatNumber} بنجاح.`);
+    }
   };
 
   const openStructureModal = () => {
@@ -401,6 +489,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
       tenantPhone: ownershipType === 'إيجار' ? formatMobileNumber(tenantPhone) : '',
       monthlyFee: monthlyFee !== '' ? Number(monthlyFee) : (config?.defaultMonthlyFee || 200),
       initialBalance: finalInitialBalance,
+      email: email.trim() || `flat${flatStr}@pyramids.com`,
+      password: password.trim() || `pyr${flatStr}#2026`,
+      accountStatus: selectedResident?.accountStatus || 'ACTIVE',
+      tenantEmail: ownershipType === 'إيجار' ? (tenantEmail.trim() || `tenant${flatStr}@pyramids.com`) : '',
+      tenantPassword: ownershipType === 'إيجار' ? (tenantPassword.trim() || `pyr${flatStr}#2026`) : '',
+      tenantAccountStatus: selectedResident?.tenantAccountStatus || 'ACTIVE',
     };
 
     setConfirmData({
@@ -974,6 +1068,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                   <th className="px-3 py-3 text-center">الرسوم الشهرية</th>
                   <th className="px-3 py-3 text-center">الرصيد / المديونية</th>
                   <th className="px-3 py-3">نوع النشاط</th>
+                  <th className="px-3 py-3 text-center">دعوات الواتساب والعضوية</th>
                   <th className="px-3 py-3">ملاحظات</th>
                   {!isReadOnly && role !== 'ASSISTANT' && <th className="px-3 py-3 text-center">الإجراءات</th>}
                 </tr>
@@ -981,7 +1076,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
               <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
                 {filteredResidents.length === 0 ? (
                   <tr>
-                    <td colSpan={!isReadOnly && role !== 'ASSISTANT' ? 10 : 9} className="px-4 py-8 text-center text-slate-400 font-bold">
+                    <td colSpan={!isReadOnly && role !== 'ASSISTANT' ? 11 : 10} className="px-4 py-8 text-center text-slate-400 font-bold">
                       لا توجد نتائج تطابق معايير البحث.
                     </td>
                   </tr>
@@ -990,7 +1085,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                     <React.Fragment key={group.floor.id}>
                       {/* Floor Separator Row */}
                       <tr className="bg-slate-200/90 dark:bg-[#16223b] border-y-2 border-slate-300 dark:border-slate-700">
-                        <td colSpan={!isReadOnly && role !== 'ASSISTANT' ? 10 : 9} className="py-3 px-4 text-right border-r-4 border-r-blue-700 dark:border-r-blue-400 sticky right-0 z-5 bg-slate-200/95 dark:bg-[#16223b]/95">
+                        <td colSpan={!isReadOnly && role !== 'ASSISTANT' ? 11 : 10} className="py-3 px-4 text-right border-r-4 border-r-blue-700 dark:border-r-blue-400 sticky right-0 z-5 bg-slate-200/95 dark:bg-[#16223b]/95">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2.5">
                               <div className="w-6 h-6 rounded-lg bg-blue-900 dark:bg-blue-600 text-white flex items-center justify-center shadow-2xs">
@@ -1013,7 +1108,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                       {/* Floor Residents */}
                       {group.residents.length === 0 ? (
                         <tr>
-                          <td colSpan={!isReadOnly && role !== 'ASSISTANT' ? 10 : 9} className="py-3 px-4 text-center text-slate-400 bg-slate-50/50">
+                          <td colSpan={!isReadOnly && role !== 'ASSISTANT' ? 11 : 10} className="py-3 px-4 text-center text-slate-400 bg-slate-50/50">
                             <div className="flex items-center justify-center gap-3">
                               <span className="text-xs font-bold text-slate-500">لا توجد وحدات مسجلة في هذا الدور حالياً.</span>
                               {!isReadOnly && role !== 'ASSISTANT' && (
@@ -1048,6 +1143,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                         const displayNotes = (res.notes || '').includes('توليد تلقائي') ? '' : (res.notes || '');
 
                         const isSelected = selectedItemId === res.id;
+                        const status = res.accountStatus || 'ACTIVE';
 
                         return (
                           <tr 
@@ -1149,6 +1245,104 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                               <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[9px] text-slate-700 font-bold">
                                 {res.activityType}
                               </span>
+                            </td>
+
+                            {/* WhatsApp Invitations & Membership Status */}
+                            <td className="px-3 py-3 text-center whitespace-nowrap">
+                              <div className="flex flex-col items-center gap-1">
+                                {/* Account Status Badge */}
+                                {status === 'REVOKED' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                                    <UserX className="w-3 h-3" />
+                                    <span>عضوية ملغاة</span>
+                                  </span>
+                                ) : status === 'INVITED' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300">
+                                    <Clock className="w-3 h-3" />
+                                    <span>دعوة مرسلة</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>حساب مفعل</span>
+                                  </span>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSendWhatsAppInvite(res, 'OWNER');
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black transition shadow-xs cursor-pointer active:scale-95"
+                                    title="إرسال دعوة انضمام عبر الواتساب للمالك مع بيانات الدخول"
+                                  >
+                                    <Phone className="w-3 h-3 fill-current" />
+                                    <span>دعوة واتساب</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCopyCredentials(res, 'OWNER');
+                                    }}
+                                    className="p-1 text-slate-600 hover:text-blue-900 bg-slate-100 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                    title="نسخ الإيميل والباسورد المخصص للساكن"
+                                  >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {!isReadOnly && role !== 'ASSISTANT' && (
+                                    status === 'REVOKED' ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleRevokeMembership(res, 'ACTIVE');
+                                        }}
+                                        className="p-1 text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                        title="إعادة تفعيل عضوية الساكن"
+                                      >
+                                        <UserCheck className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleRevokeMembership(res, 'REVOKED');
+                                        }}
+                                        className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                        title="إلغاء عضوية وحظر دخول الساكن"
+                                      >
+                                        <UserX className="w-3.5 h-3.5" />
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+
+                                {/* Tenant WhatsApp Invite if available */}
+                                {res.ownershipType === 'إيجار' && res.tenantName && (
+                                  <div className="flex items-center gap-1 mt-1 border-t border-slate-100 pt-1">
+                                    <span className="text-[9px] text-amber-900 font-bold">المستأجر:</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSendWhatsAppInvite(res, 'TENANT');
+                                      }}
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[9px] font-bold transition cursor-pointer"
+                                      title="دعوة المستأجر عبر الواتساب"
+                                    >
+                                      <Phone className="w-2.5 h-2.5 fill-current" />
+                                      <span>دعوة المستأجر</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </td>
 
                             {/* Notes */}
@@ -1411,6 +1605,76 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200/80 focus:bg-white rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 outline-none text-right font-bold transition"
                   />
                 </div>
+              </div>
+
+              {/* Login Credentials Section */}
+              <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-blue-200/60 pb-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-blue-900">
+                    <KeyRound className="w-3.5 h-3.5 text-blue-700" />
+                    <span>بيانات تسجيل الدخول للساكن</span>
+                  </div>
+                  <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                    توليد تلقائي
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-700">البريد الإلكتروني لدخول الساكن</label>
+                    <input
+                      type="email"
+                      placeholder={`flat${flatNumber || 'X'}@pyramids.com`}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      dir="ltr"
+                      className="w-full px-3 py-2 bg-white border border-blue-200 focus:border-blue-500 rounded-xl text-xs font-mono font-bold outline-none text-left transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-700">كلمة المرور لدخول الساكن</label>
+                    <input
+                      type="text"
+                      placeholder={`pyr${flatNumber || 'X'}#2026`}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      dir="ltr"
+                      className="w-full px-3 py-2 bg-white border border-blue-200 focus:border-blue-500 rounded-xl text-xs font-mono font-bold outline-none text-left transition"
+                    />
+                  </div>
+                </div>
+
+                {ownershipType === 'إيجار' && (
+                  <div className="pt-2 border-t border-blue-200/60">
+                    <div className="text-[10px] font-black text-amber-900 mb-1.5">بيانات دخول المستأجر الخاص بالوحدة</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-700">البريد الإلكتروني للمستأجر</label>
+                        <input
+                          type="email"
+                          placeholder={`tenant${flatNumber || 'X'}@pyramids.com`}
+                          value={tenantEmail}
+                          onChange={(e) => setTenantEmail(e.target.value)}
+                          dir="ltr"
+                          className="w-full px-3 py-2 bg-white border border-amber-200 focus:border-amber-500 rounded-xl text-xs font-mono font-bold outline-none text-left transition"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-700">كلمة المرور للمستأجر</label>
+                        <input
+                          type="text"
+                          placeholder={`pyr${flatNumber || 'X'}#2026`}
+                          value={tenantPassword}
+                          onChange={(e) => setTenantPassword(e.target.value)}
+                          dir="ltr"
+                          className="w-full px-3 py-2 bg-white border border-amber-200 focus:border-amber-500 rounded-xl text-xs font-mono font-bold outline-none text-left transition"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
