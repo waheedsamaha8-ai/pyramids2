@@ -1,13 +1,16 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Expense, UserRole } from '../types';
-import { Search, Plus, Filter, Calendar, FileText, Image as ImageIcon, Camera, Trash2, Edit, AlertCircle, Eye, LayoutGrid, List, Upload, Download, RefreshCw } from 'lucide-react';
-import { generateElementImage } from '../utils/imageExport';
+import { Expense, UserRole, Resident } from '../types';
+import { Search, Plus, Filter, Calendar, FileText, Image as ImageIcon, Camera, Trash2, Edit, AlertCircle, Eye, LayoutGrid, List, Upload, Download, RefreshCw, Share2, CheckCircle2 } from 'lucide-react';
+import { generateElementImageBlob, GeneratedImageResult } from '../utils/imageExport';
+import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
+import { ShareReportModal } from './ShareReportModal';
 
 interface ExpensesListProps {
   expenses: Expense[];
   expenseTypes: string[];
   role: UserRole;
   currentYear: number;
+  residents?: Resident[];
   onAdd: (expense: Expense, base64Image?: string) => void;
   onEdit: (expense: Expense, base64Image?: string) => void;
   onDelete: (id: string) => void;
@@ -19,6 +22,7 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
   expenseTypes,
   role,
   currentYear,
+  residents = [],
   onAdd,
   onEdit,
   onDelete,
@@ -33,6 +37,22 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [confirmData, setConfirmData] = useState<{ type: 'add' | 'edit' | 'delete'; expenseData?: Expense; base64Image?: string; deleteId?: string } | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [shareReportModal, setShareReportModal] = useState<{
+    isOpen: boolean;
+    imageBlob: Blob | null;
+    imageDataUrl: string | null;
+    fileName: string;
+    reportPeriodText: string;
+    reportStatsText: string;
+  }>({
+    isOpen: false,
+    imageBlob: null,
+    imageDataUrl: null,
+    fileName: '',
+    reportPeriodText: '',
+    reportStatsText: '',
+  });
 
   const actualCurrentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
 
@@ -56,12 +76,42 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
   const handleGenerateMonthlyReportImage = async () => {
     setIsGeneratingImage(true);
     try {
-      const currentMonthName = monthNamesArabic[new Date().getMonth()];
+      let periodLabel = '';
+      if (onlyCurrentMonth) {
+        periodLabel = `شهر_${monthNamesArabic[parseInt(actualCurrentMonth, 10) - 1]}_${currentYear}`;
+      } else if (filterMonth) {
+        periodLabel = `شهر_${monthNamesArabic[parseInt(filterMonth, 10) - 1]}_${currentYear}`;
+      } else {
+        periodLabel = `إجمالي_المصروفات_${currentYear}`;
+      }
+
+      if (filterType) {
+        periodLabel += `_فئة_${filterType}`;
+      }
+
       const dateStr = new Date().toISOString().slice(0, 10);
-      await generateElementImage(
-        'expenses-monthly-printable-area',
-        `تقرير_مصروفات_شهر_${currentMonthName}_${currentYear}_${dateStr}.png`
-      );
+      const fileName = `تقرير_مصروفات_${periodLabel}_${dateStr}.png`;
+
+      const result = await generateElementImageBlob('expenses-monthly-printable-area', fileName);
+
+      const totalAmt = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+      const count = filteredExpenses.length;
+      const periodText = onlyCurrentMonth
+        ? `مصروفات شهر ${monthNamesArabic[parseInt(actualCurrentMonth, 10) - 1]} ${currentYear}`
+        : filterMonth
+        ? `مصروفات شهر ${monthNamesArabic[parseInt(filterMonth, 10) - 1]} ${currentYear}`
+        : `إجمالي مصروفات السنة المالية ${currentYear}`;
+
+      const statsText = `الإجمالي: ${totalAmt.toLocaleString()} ج.م | عدد البنود: ${count}`;
+
+      setShareReportModal({
+        isOpen: true,
+        imageBlob: result.blob,
+        imageDataUrl: result.dataUrl,
+        fileName,
+        reportPeriodText: periodText,
+        reportStatsText: statsText,
+      });
     } catch (e) {
       console.error('Image generation error:', e);
       alert('حدث خطأ أثناء توليد صورة تقرير المصروفات، يُرجى المحاولة مرة أخرى.');
@@ -220,6 +270,21 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
 
   return (
     <div className="space-y-4 text-right">
+      {/* Toast Feedback for WhatsApp Sharing */}
+      {toastMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-start gap-2 animate-fade-in shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 leading-relaxed">{toastMsg}</div>
+          <button 
+            type="button"
+            onClick={() => setToastMsg(null)} 
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top controls & stats */}
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
         {/* Filters */}
@@ -300,23 +365,23 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
             />
           </button>
 
-          {/* Generate Monthly Expenses Report Image Button */}
+          {/* Generate Expenses Report Image & Direct WhatsApp Share Button */}
           <button
             type="button"
             onClick={handleGenerateMonthlyReportImage}
             disabled={isGeneratingImage}
             className="w-full py-2.5 px-1.5 sm:px-3 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white rounded-xl text-[11px] sm:text-xs font-black transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 text-center"
-            title="توليد صورة تقرير عن مصروفات هذا الشهر وحفظها بسرعة"
+            title="توليد تقرير المصروفات المتزامن تماماً مع البيانات المعروضة ومشاركته مباشرة عبر واتساب"
           >
             {isGeneratingImage ? (
               <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-200 shrink-0" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-200 shrink-0" />
                 <span className="truncate">جاري التوليد...</span>
               </>
             ) : (
               <>
-                <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span className="truncate">تقرير مصروفات الشهر</span>
+                <Share2 className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                <span className="truncate">توليد تقرير مصروفات</span>
               </>
             )}
           </button>
@@ -807,34 +872,60 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
         dir="rtl"
       >
         {/* Header */}
-        <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-6">
+        <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-5">
           <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك عمارة بيراميدز فيو ١</h1>
           <h2 className="text-base font-bold text-slate-700">
-            تقرير ونفقات شهر {monthNamesArabic[new Date().getMonth()]} (السنة المالية {currentYear})
+            {onlyCurrentMonth
+              ? `تقرير ونفقات شهر ${monthNamesArabic[parseInt(actualCurrentMonth, 10) - 1]} (السنة المالية ${currentYear})`
+              : filterMonth
+              ? `تقرير ونفقات شهر ${monthNamesArabic[parseInt(filterMonth, 10) - 1]} (السنة المالية ${currentYear})`
+              : `تقرير إجمالي نفقات ومصروفات (السنة المالية ${currentYear})`}
           </h2>
           <div className="flex justify-between items-center text-xs text-slate-500 pt-2 font-semibold">
             <span>تاريخ إصدار التقرير: {new Date().toLocaleDateString('ar-EG')}</span>
-            <span>إجمالي بنود المصروفات: {currentMonthExpenses.length} بنود</span>
+            <span>إجمالي بنود المصروفات بالتقرير: {filteredExpenses.length} بند</span>
           </div>
+
+          {/* Active Filter Indicators on Report */}
+          {(filterType || !onlyCurrentMonth) && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-dashed border-slate-200 text-[11px] text-slate-600 font-bold">
+              <span className="text-slate-400">الفلاتر المطبقة:</span>
+              {filterType && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300">
+                  فئة المصروف: {filterType}
+                </span>
+              )}
+              {filterMonth && !onlyCurrentMonth && (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200">
+                  شهر: {monthNamesArabic[parseInt(filterMonth, 10) - 1]}
+                </span>
+              )}
+              {!onlyCurrentMonth && !filterMonth && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200">
+                  عرض كل الشهور
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Stats Summary Bar */}
         <div className="grid grid-cols-3 gap-4 border border-slate-300 rounded-xl p-4 bg-slate-50 mb-6 text-xs">
           <div className="text-center space-y-1">
-            <span className="font-extrabold text-slate-500">إجمالي مصروفات الشهر</span>
+            <span className="font-extrabold text-slate-500">إجمالي المبلغ المنصرف</span>
             <div className="text-base font-black text-red-700">
-              {currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()} ج.م
+              {filteredExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()} ج.م
             </div>
           </div>
           <div className="text-center space-y-1 border-x border-slate-300">
             <span className="font-extrabold text-slate-500">عدد المعاملات/الفواتير</span>
-            <div className="text-base font-black text-slate-800">{currentMonthExpenses.length} فاتورة</div>
+            <div className="text-base font-black text-slate-800">{filteredExpenses.length} فاتورة</div>
           </div>
           <div className="text-center space-y-1">
             <span className="font-extrabold text-slate-500">متوسط قيمة المصروف</span>
             <div className="text-base font-black text-blue-900">
-              {currentMonthExpenses.length > 0
-                ? Math.round(currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0) / currentMonthExpenses.length).toLocaleString()
+              {filteredExpenses.length > 0
+                ? Math.round(filteredExpenses.reduce((sum, e) => sum + e.amount, 0) / filteredExpenses.length).toLocaleString()
                 : 0}{' '}
               ج.م
             </div>
@@ -848,24 +939,28 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
               <th className="border border-slate-300 p-2 text-center w-12">#</th>
               <th className="border border-slate-300 p-2">البند / فئة المصروف</th>
               <th className="border border-slate-300 p-2 text-center">الشهر</th>
+              <th className="border border-slate-300 p-2 text-center">التاريخ</th>
               <th className="border border-slate-300 p-2 text-center">المبلغ</th>
               <th className="border border-slate-300 p-2">ملاحظات والتفاصيل</th>
             </tr>
           </thead>
           <tbody>
-            {currentMonthExpenses.length === 0 ? (
+            {filteredExpenses.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center p-6 text-slate-400 font-bold">
-                  لا توجد مصروفات مسجلة لهذا الشهر حتى الآن.
+                <td colSpan={6} className="text-center p-6 text-slate-400 font-bold">
+                  لا توجد مصروفات مسجلة تطابق هذه الشروط المحددة.
                 </td>
               </tr>
             ) : (
-              currentMonthExpenses.map((exp, idx) => (
+              filteredExpenses.map((exp, idx) => (
                 <tr key={exp.id} className="border-b border-slate-200">
                   <td className="border border-slate-300 p-2 text-center font-bold text-slate-500">{idx + 1}</td>
                   <td className="border border-slate-300 p-2 font-black text-slate-900">{exp.expenseType}</td>
                   <td className="border border-slate-300 p-2 text-center text-slate-700">
                     {monthNamesArabic[parseInt(exp.month, 10) - 1]} {exp.year}
+                  </td>
+                  <td className="border border-slate-300 p-2 text-center text-slate-600 font-mono">
+                    {exp.date || '—'}
                   </td>
                   <td className="border border-slate-300 p-2 text-center font-black text-red-700">
                     {exp.amount.toLocaleString()} ج.م
@@ -875,21 +970,42 @@ export const ExpensesList: React.FC<ExpensesListProps> = ({
               ))
             )}
           </tbody>
-          {currentMonthExpenses.length > 0 && (
+          {filteredExpenses.length > 0 && (
             <tfoot>
               <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-800">
-                <td colSpan={3} className="border border-slate-300 p-2.5 text-left pl-4">
+                <td colSpan={4} className="border border-slate-300 p-2.5 text-left pl-4 font-black">
                   إجمالي المبالغ المنصرفة:
                 </td>
-                <td className="border border-slate-300 p-2.5 text-center text-red-800 text-sm">
-                  {currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()} ج.م
+                <td className="border border-slate-300 p-2.5 text-center text-red-800 text-sm font-black">
+                  {filteredExpenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()} ج.م
                 </td>
                 <td className="border border-slate-300 p-2.5"></td>
               </tr>
             </tfoot>
           )}
         </table>
+
+        <div className="mt-4 pt-3 border-t border-slate-200 text-center text-[11px] text-slate-400 font-semibold">
+          تم استخراج هذا التقرير تلقائياً ومطابق تماماً للبيانات والشروط النشطة على الشاشة • اتحاد ملاك عمارة بيراميدز فيو ١
+        </div>
       </div>
+
+      {/* Share Report Modal */}
+      <ShareReportModal
+        isOpen={shareReportModal.isOpen}
+        onClose={() => setShareReportModal((prev) => ({ ...prev, isOpen: false }))}
+        imageBlob={shareReportModal.imageBlob}
+        imageDataUrl={shareReportModal.imageDataUrl}
+        fileName={shareReportModal.fileName}
+        reportTitle="تقرير مصروفات معتمد"
+        reportPeriodText={shareReportModal.reportPeriodText}
+        reportStatsText={shareReportModal.reportStatsText}
+        residents={residents}
+        onSuccessToast={(msg) => {
+          setToastMsg(msg);
+          setTimeout(() => setToastMsg(null), 8000);
+        }}
+      />
     </div>
   );
 };

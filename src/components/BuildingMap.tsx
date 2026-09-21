@@ -20,11 +20,14 @@ import {
   AlertTriangle,
   Receipt,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Share2,
+  CheckCircle2
 } from 'lucide-react';
 import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
 import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
+import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
 
 interface BuildingMapProps {
   residents: Resident[];
@@ -47,6 +50,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
   const [activeUnit, setActiveUnit] = useState<{ unitNum: number | string; floor: FloorConfig; resident?: Resident } | null>(null);
   const [copiedReceipt, setCopiedReceipt] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const receiptCardRef = useRef<HTMLDivElement>(null);
   
@@ -472,36 +476,65 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     return canvas;
   };
 
-  // Instant Generation & Download Image Function (< 10ms execution)
-  const handleCaptureAndShareImage = (openWAAfter: boolean = false) => {
+  // Direct WhatsApp Image Sharing with High-Res Canvas & Instant Feedback
+  const handleCaptureAndShareImage = async (target: 'owner' | 'tenant' = 'owner') => {
     if (!financials) return;
     setIsGeneratingImage(true);
 
     try {
       const canvas = generateNativeReceiptCanvas();
-      const dataUrl = canvas.toDataURL('image/png');
       const flatNum = financials.resident.flatNumber;
       const isPaid = financials.currentMonthStatus === 'مسدد';
       const fileName = isPaid 
         ? `إيصال_سداد_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`
         : `إشعار_مطالبة_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`;
 
-      // 1. Instant Download of Image File to Device
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const targetPhone = target === 'owner' 
+        ? (financials.resident.phone || financials.resident.tenantPhone)
+        : (financials.resident.tenantPhone || financials.resident.phone);
+      
+      const targetName = target === 'owner'
+        ? financials.resident.name
+        : (financials.resident.tenantName || 'المستأجر');
 
-      // 2. Open WhatsApp only if explicitly requested
-      if (openWAAfter) {
-        sendWhatsAppReceipt('owner');
+      const receiptNum = isPaid
+        ? (financials.currentMonthPayment?.receiptNumber ? `#${financials.currentMonthPayment.receiptNumber}` : `REC-${financials.resident.flatNumber}-${selectedMonth}${currentYear}`)
+        : `CLM-${financials.resident.flatNumber}-${selectedMonth}${currentYear}`;
+
+      const paidAmt = financials.currentMonthPayment?.amount || financials.monthlyFee;
+      const totalDue = financials.monthlyFee + financials.oldDebtVal;
+
+      let msgText = isPaid
+        ? `🧾 *اتحاد ملاك عمارة بيراميدز فيو ١*\n💐 *إيصال سداد إلكتروني معتمد*\nالوحدة: شقة ${financials.resident.flatNumber} (${financials.resident.activityType})\nالشاغل: ${targetName}\nالمبلغ المسدد: ${paidAmt.toLocaleString()} ج.م ✓\nعن شهر: ${monthName} ${currentYear}\nرقم الإيصال: ${receiptNum}\nشاكرين لكم حسن تعاونكم.`
+        : `🏢 *اتحاد ملاك عمارة بيراميدز فيو ١*\n🏛️ *إشعار مطالبة إلكتروني*\nالوحدة: شقة ${financials.resident.flatNumber} (${financials.resident.activityType})\nالمطلوب منه: ${targetName}\nاشتراك شهر: ${monthName} ${currentYear} (${financials.monthlyFee.toLocaleString()} ج.م)\n` +
+          (financials.oldDebtVal > 0 ? `مديونية سابقة: ${financials.oldDebtVal.toLocaleString()} ج.م\n💰 إجمالي المستحق: ${totalDue.toLocaleString()} ج.م\n` : `💰 المبلغ المستحق: ${financials.monthlyFee.toLocaleString()} ج.م\n`) +
+          `يرجى التكرم بالمبادرة بالسداد مع جزيل الشكر.`;
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+      if (!blob) {
+        setIsGeneratingImage(false);
+        return;
       }
 
-      setIsGeneratingImage(false);
+      await shareImageViaWhatsApp({
+        imageBlob: blob,
+        fileName,
+        phone: targetPhone,
+        recipientName: targetName,
+        title: isPaid ? `إيصال سداد شقة ${flatNum}` : `إشعار مطالبة شقة ${flatNum}`,
+        text: msgText,
+        onSuccessToast: (msg) => {
+          setToastMsg(msg);
+          setTimeout(() => setToastMsg(null), 8000);
+        },
+        onErrorToast: (err) => {
+          alert(err);
+        }
+      });
     } catch (err) {
-      console.error('Error generating instant canvas image:', err);
+      console.error('Error generating and sharing canvas image:', err);
+      alert('حدث خطأ أثناء توليد الصورة، يُرجى المحاولة مرة أخرى.');
+    } finally {
       setIsGeneratingImage(false);
     }
   };
@@ -698,6 +731,21 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
             <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               {financials ? (
                 <>
+                  {/* WhatsApp Direct Share Toast Feedback */}
+                  {toastMsg && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-start gap-2 animate-fade-in shadow-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-relaxed">{toastMsg}</div>
+                      <button 
+                        type="button"
+                        onClick={() => setToastMsg(null)} 
+                        className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
                   {/* Resident Info Card */}
                   <div className="bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100/60 space-y-2">
                     <div className="flex items-center justify-between">
@@ -867,21 +915,21 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                           <span className="truncate">إرسال إشعار</span>
                         </button>
 
-                        {/* Button 2: Generate & Download Image Only */}
+                        {/* Button 2: Generate & Share Image Directly via WhatsApp */}
                         <button
                           type="button"
                           disabled={isGeneratingImage}
-                          onClick={() => handleCaptureAndShareImage(false)}
+                          onClick={() => handleCaptureAndShareImage('owner')}
                           className="py-2 px-1 bg-blue-900 hover:bg-blue-950 text-white rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50 text-center active:scale-95"
-                          title={financials.currentMonthStatus === 'مسدد' ? 'توليد وتنزيل صورة الإيصال على جهازك' : 'توليد وتنزيل صورة إشعار المطالبة على جهازك'}
+                          title={financials.currentMonthStatus === 'مسدد' ? 'توليد صورة الإيصال ومشاركتها مباشرة على واتساب الوحدة' : 'توليد صورة إشعار المطالبة ومشاركتها مباشرة على واتساب الوحدة'}
                         >
                           {isGeneratingImage ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-white" />
                           ) : (
-                            <ImageIcon className="w-3.5 h-3.5 shrink-0 text-white" />
+                            <Share2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
                           )}
                           <span className="truncate">
-                            {financials.currentMonthStatus === 'مسدد' ? 'توليد صورة إيصال' : 'توليد صورة مطالبة'}
+                            {financials.currentMonthStatus === 'مسدد' ? 'توليد صورة إيصال' : 'توليد صورة إشعار'}
                           </span>
                         </button>
 
@@ -902,14 +950,25 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                       </div>
 
                       {financials.resident.ownershipType === 'إيجار' && (financials.resident.tenantName || financials.resident.tenantPhone) && (
-                        <div className="pt-1">
+                        <div className="pt-1 flex flex-col sm:flex-row gap-1.5">
                           <button
                             type="button"
                             onClick={() => sendWhatsAppReceipt('tenant')}
-                            className="w-full py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                            className="flex-1 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                            title="إرسال رسالة نصية للمستأجر عبر واتساب"
                           >
                             <MessageSquare className="w-3 h-3 text-amber-700" />
-                            <span>إرسال إشعار للمستأجر ({financials.resident.tenantName || 'المستأجر'})</span>
+                            <span>رسالة نصية للمستأجر</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isGeneratingImage}
+                            onClick={() => handleCaptureAndShareImage('tenant')}
+                            className="flex-1 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                            title="توليد صورة الإيصال أو الإشعار ومشاركتها مباشرة لواتساب المستأجر"
+                          >
+                            <Share2 className="w-3 h-3 text-blue-700" />
+                            <span>مشاركة صورة للمستأجر</span>
                           </button>
                         </div>
                       )}

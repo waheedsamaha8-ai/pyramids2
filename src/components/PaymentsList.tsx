@@ -1,8 +1,10 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Payment, Resident, UserRole, FloorConfig } from '../types';
-import { Search, Plus, Calendar, FileText, Image as ImageIcon, Camera, Trash2, Edit, AlertCircle, Eye, User, LayoutGrid, List, Building, ArrowUpDown, Upload, X, ZoomIn, Download, RefreshCw } from 'lucide-react';
+import { Search, Plus, Calendar, FileText, Image as ImageIcon, Camera, Trash2, Edit, AlertCircle, Eye, User, LayoutGrid, List, Building, ArrowUpDown, Upload, X, ZoomIn, Download, RefreshCw, Share2, CheckCircle2, Receipt } from 'lucide-react';
 import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers } from '../utils/buildingStructure';
-import { generateElementImage } from '../utils/imageExport';
+import { generateElementImageBlob, GeneratedImageResult } from '../utils/imageExport';
+import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
+import { ShareReportModal } from './ShareReportModal';
 
 interface PaymentsListProps {
   payments: Payment[];
@@ -72,22 +74,24 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
     'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
   ];
 
-  const handleGenerateMonthlyReportImage = async () => {
-    setIsGeneratingImage(true);
-    try {
-      const currentMonthName = monthNamesArabic[new Date().getMonth()];
-      const dateStr = new Date().toISOString().slice(0, 10);
-      await generateElementImage(
-        'payments-monthly-printable-area',
-        `تقرير_تحصيلات_شهر_${currentMonthName}_${currentYear}_${dateStr}.png`
-      );
-    } catch (e) {
-      console.error('Image generation error:', e);
-      alert('حدث خطأ أثناء توليد صورة تقرير التحصيل، يُرجى المحاولة مرة أخرى.');
-    } finally {
-      setIsGeneratingImage(false);
-    }
-  };
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [shareReportModal, setShareReportModal] = useState<{
+    isOpen: boolean;
+    imageBlob: Blob | null;
+    imageDataUrl: string | null;
+    fileName: string;
+    reportPeriodText: string;
+    reportStatsText: string;
+    initialResidentId?: string;
+  }>({
+    isOpen: false,
+    imageBlob: null,
+    imageDataUrl: null,
+    fileName: '',
+    reportPeriodText: '',
+    reportStatsText: '',
+    initialResidentId: '',
+  });
 
   const filteredPayments = payments
     .filter((p) => p.year === currentYear)
@@ -136,6 +140,228 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
         : numB.localeCompare(numA, 'ar-EG', { numeric: true });
     });
   }, [filteredPayments, receiptSort]);
+
+  // Synchronized Monthly/Filtered Report Generation & Direct WhatsApp Share
+  const handleGenerateMonthlyReportImage = async () => {
+    setIsGeneratingImage(true);
+    try {
+      let periodLabel = '';
+      if (onlyCurrentMonth) {
+        periodLabel = `شهر_${monthNamesArabic[parseInt(actualCurrentMonth, 10) - 1]}_${currentYear}`;
+      } else if (filterMonth) {
+        periodLabel = `شهر_${monthNamesArabic[parseInt(filterMonth, 10) - 1]}_${currentYear}`;
+      } else {
+        periodLabel = `إجمالي_التحصيلات_${currentYear}`;
+      }
+
+      const activeResidentObj = filterResident ? residents.find((r) => r.id === filterResident) : null;
+      if (activeResidentObj) {
+        periodLabel += `_شقة_${activeResidentObj.flatNumber}`;
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const fileName = `تقرير_تحصيلات_${periodLabel}_${dateStr}.png`;
+
+      const result = await generateElementImageBlob('payments-monthly-printable-area', fileName);
+
+      const totalAmt = sortedFilteredPayments.reduce((s, p) => s + p.amount, 0);
+      const count = sortedFilteredPayments.length;
+      const periodText = onlyCurrentMonth
+        ? `تحصيلات شهر ${monthNamesArabic[parseInt(actualCurrentMonth, 10) - 1]} ${currentYear}`
+        : filterMonth
+        ? `تحصيلات شهر ${monthNamesArabic[parseInt(filterMonth, 10) - 1]} ${currentYear}`
+        : `إجمالي تحصيلات السنة المالية ${currentYear}`;
+
+      const statsText = `الإجمالي: ${totalAmt.toLocaleString()} ج.م | عدد العمليات: ${count}`;
+
+      // If a specific unit/resident filter is active on screen, share directly to that unit's WhatsApp!
+      if (activeResidentObj) {
+        const targetPhone = activeResidentObj.phone || activeResidentObj.tenantPhone;
+        const targetName = `شقة ${activeResidentObj.flatNumber} (${activeResidentObj.name})`;
+        const shareText = `🏢 *اتحاد ملاك عمارة بيراميدز فيو ١*\n📊 *تقرير تحصيلات معتمد طبقاً للبيانات المعروضة*\n🚪 *الوحدة:* ${targetName}\n🗓 *الفترة:* ${periodText}\n💰 *${statsText}*\n-----------------------------------\nمرفق صورة تقرير التحصيلات المتزامنة تماماً مع بيانات الشاشة.\nاتحاد ملاك بيراميدز فيو ١`;
+
+        await shareImageViaWhatsApp({
+          imageBlob: result.blob,
+          fileName,
+          phone: targetPhone,
+          recipientName: targetName,
+          title: `تقرير تحصيلات ${targetName}`,
+          text: shareText,
+          onSuccessToast: (msg) => {
+            setToastMsg(msg);
+            setTimeout(() => setToastMsg(null), 8000);
+          },
+          onErrorToast: (err) => {
+            alert(err);
+          },
+        });
+      } else {
+        // No specific unit filtered -> Open ShareReportModal allowing selection of any unit's WhatsApp or general share
+        setShareReportModal({
+          isOpen: true,
+          imageBlob: result.blob,
+          imageDataUrl: result.dataUrl,
+          fileName,
+          reportPeriodText: periodText,
+          reportStatsText: statsText,
+          initialResidentId: filterResident || '',
+        });
+      }
+    } catch (e) {
+      console.error('Image generation error:', e);
+      alert('حدث خطأ أثناء توليد صورة تقرير التحصيل، يُرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  // Generate High-Resolution Single Payment Official Receipt Canvas
+  const generateNativePaymentReceiptCanvas = (payment: Payment): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    const res = residents.find((r) => r.id === payment.residentId || r.flatNumber === payment.flatNumber);
+    const dpr = 2;
+    const width = 600;
+    const height = 660;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+
+    ctx.scale(dpr, dpr);
+
+    // Canvas Background
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, width, height);
+
+    // Double Border
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#047857';
+    ctx.strokeRect(12, 12, width - 24, height - 24);
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#a7f3d0';
+    ctx.strokeRect(16, 16, width - 32, height - 32);
+
+    // Header Banner
+    ctx.fillStyle = '#047857';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(24, 24, width - 48, 80, 12);
+    else ctx.rect(24, 24, width - 48, 80);
+    ctx.fill();
+
+    // Header Text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 19px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('اتحاد ملاك عمارة بيراميدز فيو ١', width - 45, 54);
+
+    ctx.font = 'normal 13px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#d1fae5';
+    ctx.fillText('💐 إيصال سداد واستلام مالي معتمد', width - 45, 80);
+
+    // Receipt Badge
+    const receiptNum = payment.receiptNumber ? `#${payment.receiptNumber}` : `REC-${payment.flatNumber}-${payment.month}${payment.year}`;
+    ctx.fillStyle = '#065f46';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(40, 42, 160, 44, 8);
+    else ctx.rect(40, 42, 160, 44);
+    ctx.fill();
+
+    ctx.fillStyle = '#a7f3d0';
+    ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('رقم الإيصال الرسمي', 120, 58);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(receiptNum, 120, 77);
+
+    // Details List
+    let y = 135;
+    const drawRow = (label: string, value: string, isHighlight: boolean = false, color: string = '#0f172a') => {
+      ctx.fillStyle = isHighlight ? '#ecfdf5' : (y % 2 === 0 ? '#ffffff' : '#f8fafc');
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(30, y, width - 60, 42, 8);
+      else ctx.rect(30, y, width - 60, 42);
+      ctx.fill();
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = isHighlight ? '#6ee7b7' : '#e2e8f0';
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(label, width - 50, y + 26);
+
+      ctx.fillStyle = color;
+      ctx.font = isHighlight ? 'bold 16px system-ui, -apple-system, sans-serif' : 'bold 13.5px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(value, 50, y + 26);
+
+      y += 50;
+    };
+
+    drawRow('رقم الوحدة السكنية:', `شقة ${payment.flatNumber}`);
+    drawRow('اسم الساكن / الشاغل:', payment.residentName);
+    if (res?.ownershipType === 'إيجار' && res?.tenantName) {
+      drawRow('المستأجر الحالي:', res.tenantName);
+    }
+    const monthName = monthNamesArabic[parseInt(payment.month, 10) - 1] || payment.month;
+    drawRow('بيان الاشتراك المسدد:', `اشتراك شهر ${monthName} (${payment.year})`);
+    drawRow('فئة التحصيل:', payment.paymentType);
+    drawRow('تاريخ السداد / التحصيل:', payment.date || `${payment.year}-${payment.month}`);
+    drawRow('المبلغ المستلم والمسدد:', `${Math.round(payment.amount).toLocaleString()} جنيه مصري`, true, '#047857');
+    if (payment.notes) {
+      drawRow('ملاحظات إضافية:', payment.notes);
+    }
+
+    // Bottom Watermark
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('تم إصدار هذا الإيصال إلكترونياً وموثق بنظام إدارة اتحاد ملاك عمارة بيراميدز فيو ١', width / 2, y + 24);
+
+    return canvas;
+  };
+
+  // Generate & Share Single Payment Receipt Directly via WhatsApp
+  const handleGenerateSinglePaymentReceipt = async (payment: Payment) => {
+    try {
+      const res = residents.find((r) => r.id === payment.residentId || r.flatNumber === payment.flatNumber);
+      const canvas = generateNativePaymentReceiptCanvas(payment);
+      const fileName = `إيصال_سداد_شقة_${payment.flatNumber}_شهر_${payment.month}_${payment.year}.png`;
+      const targetPhone = res?.phone || res?.tenantPhone;
+      const targetName = `شقة ${payment.flatNumber} (${payment.residentName})`;
+
+      const monthName = monthNamesArabic[parseInt(payment.month, 10) - 1] || payment.month;
+      const receiptNum = payment.receiptNumber ? `#${payment.receiptNumber}` : `REC-${payment.flatNumber}-${payment.month}${payment.year}`;
+
+      const shareText = `🏢 *اتحاد ملاك عمارة بيراميدز فيو ١*\n💐 *إيصال سداد إلكتروني معتمد*\n🚪 *الوحدة:* شقة ${payment.flatNumber}\n👤 *الساكن:* ${payment.residentName}\n💰 *المبلغ المسدد:* ${Math.round(payment.amount).toLocaleString()} ج.م ✓\n🗓 *عن شهر:* ${monthName} ${payment.year}\n🔢 *رقم الإيصال:* ${receiptNum}\n📅 *تاريخ التحصيل:* ${payment.date || `${payment.year}-${payment.month}`}\n-----------------------------------\nشاكرين لكم حسن تعاونكم.\nاتحاد ملاك بيراميدز فيو ١`;
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+      if (!blob) return;
+
+      await shareImageViaWhatsApp({
+        imageBlob: blob,
+        fileName,
+        phone: targetPhone,
+        recipientName: targetName,
+        title: `إيصال سداد شقة ${payment.flatNumber}`,
+        text: shareText,
+        onSuccessToast: (msg) => {
+          setToastMsg(msg);
+          setTimeout(() => setToastMsg(null), 8000);
+        },
+        onErrorToast: (err) => {
+          alert(err);
+        },
+      });
+    } catch (e) {
+      console.error('Single payment receipt error:', e);
+      alert('حدث خطأ أثناء توليد ومشاركة صورة الإيصال.');
+    }
+  };
 
   const totalAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
 
@@ -325,6 +551,21 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
 
   return (
     <div className="space-y-4 text-right">
+      {/* Toast Feedback for WhatsApp Sharing */}
+      {toastMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-start gap-2 animate-fade-in shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 leading-relaxed">{toastMsg}</div>
+          <button 
+            type="button"
+            onClick={() => setToastMsg(null)} 
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -421,23 +662,23 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
             />
           </button>
 
-          {/* Generate Monthly Collection Report Image Button */}
+          {/* Generate Collection Report Image & Direct WhatsApp Share Button */}
           <button
             type="button"
             onClick={handleGenerateMonthlyReportImage}
             disabled={isGeneratingImage}
             className="w-full py-2.5 px-1.5 sm:px-3 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white rounded-xl text-[11px] sm:text-xs font-black transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 text-center"
-            title="توليد صورة تقرير عن تحصيلات هذا الشهر وحفظها بسرعة"
+            title="توليد تقرير التحصيلات المتزامن تماماً مع البيانات المعروضة ومشاركته مباشرة عبر واتساب"
           >
             {isGeneratingImage ? (
               <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-200 shrink-0" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-200 shrink-0" />
                 <span className="truncate">جاري التوليد...</span>
               </>
             ) : (
               <>
-                <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span className="truncate">تقرير تحصيلات الشهر</span>
+                <Share2 className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                <span className="truncate">توليد تقرير تحصيلات</span>
               </>
             )}
           </button>
@@ -530,18 +771,27 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
                         <td className="px-4 py-3 text-emerald-600 font-black">{Math.round(p.amount)} ج.م</td>
                         <td className="px-4 py-3 text-slate-500 font-mono">{p.receiptNumber || 'بدون إيصال'}</td>
                         <td className="px-4 py-3 text-center">
-                          {p.fileUrl ? (
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             <button
-                              onClick={(e) => { e.stopPropagation(); onPreviewImage(p.fileUrl!); }}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition inline-flex items-center gap-1 text-[10px] cursor-pointer font-bold"
-                              title="عرض الإيصال"
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleGenerateSinglePaymentReceipt(p); }}
+                              className="p-1 px-1.5 text-emerald-800 hover:bg-emerald-100 rounded-lg transition inline-flex items-center gap-1 text-[10px] cursor-pointer font-black border border-emerald-200 bg-emerald-50/70"
+                              title="توليد صورة إيصال سداد ومشاركتها مباشرة لواتساب الوحدة"
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>عرض الإيصال</span>
+                              <Share2 className="w-3 h-3 text-emerald-600" />
+                              <span>توليد صورة إيصال</span>
                             </button>
-                          ) : (
-                            <span className="text-[10px] text-slate-300 font-bold">لا يوجد</span>
-                          )}
+                            {p.fileUrl && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onPreviewImage(p.fileUrl!); }}
+                                className="p-1 px-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition inline-flex items-center gap-1 text-[10px] cursor-pointer font-bold border border-blue-100"
+                                title="معاينة المرفق"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>المرفق</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-slate-500 font-semibold text-xs max-w-[180px] truncate" title={p.notes || ''}>
                           {p.notes || '—'}
@@ -776,16 +1026,28 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 border-t border-slate-50 pt-3 mt-2">
-                        {p.fileUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleGenerateSinglePaymentReceipt(p); }}
+                          className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded-lg text-[10px] font-black transition cursor-pointer"
+                          title="توليد صورة إيصال سداد ومشاركتها مباشرة لواتساب الوحدة"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>توليد صورة إيصال</span>
+                        </button>
+
+                        {p.fileUrl && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onPreviewImage(p.fileUrl!); }}
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-blue-100 text-blue-700 hover:bg-blue-50 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                            className="p-1.5 px-2 border border-blue-100 text-blue-700 hover:bg-blue-50 rounded-lg text-[10px] font-bold transition cursor-pointer flex items-center gap-1 shrink-0"
+                            title="عرض الإيصال المرفق"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                            <span>عرض الإيصال</span>
+                            <span>المرفق</span>
                           </button>
-                        ) : (
-                          <span className="flex-1 text-center text-[10px] text-slate-300 font-bold py-1.5">لا يوجد إيصال مرفق</span>
+                        )}
+                        {!p.fileUrl && (
+                          <span className="text-[10px] text-slate-300 font-bold py-1.5 px-1">بدون مرفق</span>
                         )}
 
                         {!isReadOnly && role !== 'ASSISTANT' && (
@@ -1113,34 +1375,70 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
         dir="rtl"
       >
         {/* Header */}
-        <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-6">
+        <div className="text-center space-y-2 border-b-2 border-slate-800 pb-4 mb-5">
           <h1 className="text-2xl font-black text-slate-900">اتحاد ملاك عمارة بيراميدز فيو ١</h1>
           <h2 className="text-base font-bold text-slate-700">
-            تقرير وتحصيلات شهر {monthNamesArabic[new Date().getMonth()]} (السنة المالية {currentYear})
+            {onlyCurrentMonth
+              ? `تقرير تحصيلات شهر ${monthNamesArabic[parseInt(actualCurrentMonth, 10) - 1]} (السنة المالية ${currentYear})`
+              : filterMonth
+              ? `تقرير تحصيلات شهر ${monthNamesArabic[parseInt(filterMonth, 10) - 1]} (السنة المالية ${currentYear})`
+              : `تقرير إجمالي التحصيلات (السنة المالية ${currentYear})`}
           </h2>
           <div className="flex justify-between items-center text-xs text-slate-500 pt-2 font-semibold">
             <span>تاريخ إصدار التقرير: {new Date().toLocaleDateString('ar-EG')}</span>
-            <span>إجمالي المعاملات المسجلة: {currentMonthPayments.length} تحصيل</span>
+            <span>إجمالي المعاملات بالتقرير: {sortedFilteredPayments.length} عملية تحصيل</span>
           </div>
+
+          {/* Active Filter Indicators on Report */}
+          {(filterResident || filterType || !onlyCurrentMonth || receiptSort !== 'none') && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-dashed border-slate-200 text-[11px] text-slate-600 font-bold">
+              <span className="text-slate-400">الفلاتر المطبقة:</span>
+              {filterResident && (
+                <span className="px-2 py-0.5 bg-blue-50 text-blue-800 rounded border border-blue-200">
+                  الوحدة: شقة {residents.find((r) => r.id === filterResident)?.flatNumber} ({residents.find((r) => r.id === filterResident)?.name})
+                </span>
+              )}
+              {filterType && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300">
+                  فئة التحصيل: {filterType}
+                </span>
+              )}
+              {filterMonth && !onlyCurrentMonth && (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200">
+                  شهر: {monthNamesArabic[parseInt(filterMonth, 10) - 1]}
+                </span>
+              )}
+              {!onlyCurrentMonth && !filterMonth && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200">
+                  عرض كل الشهور
+                </span>
+              )}
+              {receiptSort !== 'none' && (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200">
+                  ترتيب أرقام الإيصالات: {receiptSort === 'asc' ? 'تصاعدي' : 'تنازلي'}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Stats Summary Bar */}
         <div className="grid grid-cols-3 gap-4 border border-slate-300 rounded-xl p-4 bg-slate-50 mb-6 text-xs">
           <div className="text-center space-y-1">
-            <span className="font-extrabold text-slate-500">إجمالي تحصيلات الشهر</span>
+            <span className="font-extrabold text-slate-500">إجمالي المبلغ المحصل</span>
             <div className="text-base font-black text-emerald-700">
-              {currentMonthPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()} ج.م
+              {sortedFilteredPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()} ج.م
             </div>
           </div>
           <div className="text-center space-y-1 border-x border-slate-300">
             <span className="font-extrabold text-slate-500">عدد عمليات التحصيل</span>
-            <div className="text-base font-black text-slate-800">{currentMonthPayments.length} إيصال</div>
+            <div className="text-base font-black text-slate-800">{sortedFilteredPayments.length} إيصال</div>
           </div>
           <div className="text-center space-y-1">
             <span className="font-extrabold text-slate-500">متوسط قيمة التحصيل</span>
             <div className="text-base font-black text-blue-900">
-              {currentMonthPayments.length > 0
-                ? Math.round(currentMonthPayments.reduce((sum, p) => sum + p.amount, 0) / currentMonthPayments.length).toLocaleString()
+              {sortedFilteredPayments.length > 0
+                ? Math.round(sortedFilteredPayments.reduce((sum, p) => sum + p.amount, 0) / sortedFilteredPayments.length).toLocaleString()
                 : 0}{' '}
               ج.م
             </div>
@@ -1155,51 +1453,77 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
               <th className="border border-slate-300 p-2 text-center">الوحدة</th>
               <th className="border border-slate-300 p-2">اسم الساكن</th>
               <th className="border border-slate-300 p-2 text-center">فئة الاشتراك</th>
+              <th className="border border-slate-300 p-2 text-center">شهر الاشتراك</th>
               <th className="border border-slate-300 p-2 text-center">تاريخ التحصيل</th>
               <th className="border border-slate-300 p-2 text-center">المبلغ المستلم</th>
               <th className="border border-slate-300 p-2 text-center">رقم الإيصال</th>
             </tr>
           </thead>
           <tbody>
-            {currentMonthPayments.length === 0 ? (
+            {sortedFilteredPayments.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center p-6 text-slate-400 font-bold">
-                  لا توجد عمليات تحصيل مسجلة لهذا الشهر حتى الآن.
+                <td colSpan={8} className="text-center p-6 text-slate-400 font-bold">
+                  لا توجد عمليات تحصيل مسجلة تطابق هذه الشروط المحددة.
                 </td>
               </tr>
             ) : (
-              currentMonthPayments.map((p, idx) => (
+              sortedFilteredPayments.map((p, idx) => (
                 <tr key={p.id} className="border-b border-slate-200">
                   <td className="border border-slate-300 p-2 text-center font-bold text-slate-500">{idx + 1}</td>
                   <td className="border border-slate-300 p-2 text-center font-black">وحدة {p.flatNumber}</td>
                   <td className="border border-slate-300 p-2 font-bold text-slate-900">{p.residentName}</td>
                   <td className="border border-slate-300 p-2 text-center text-slate-700">{p.paymentType}</td>
+                  <td className="border border-slate-300 p-2 text-center text-slate-600 font-semibold">
+                    {monthNamesArabic[parseInt(p.month, 10) - 1] || p.month} {p.year}
+                  </td>
                   <td className="border border-slate-300 p-2 text-center text-slate-600">{p.date || p.month}</td>
                   <td className="border border-slate-300 p-2 text-center font-black text-emerald-700">
-                    {p.amount.toLocaleString()} ج.م
+                    {Math.round(p.amount).toLocaleString()} ج.م
                   </td>
-                  <td className="border border-slate-300 p-2 text-center font-mono text-slate-700">
+                  <td className="border border-slate-300 p-2 text-center font-mono text-slate-700 font-bold">
                     {p.receiptNumber ? `#${p.receiptNumber}` : 'مسدد'}
                   </td>
                 </tr>
               ))
             )}
           </tbody>
-          {currentMonthPayments.length > 0 && (
+          {sortedFilteredPayments.length > 0 && (
             <tfoot>
               <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-800">
-                <td colSpan={5} className="border border-slate-300 p-2.5 text-left pl-4">
+                <td colSpan={6} className="border border-slate-300 p-2.5 text-left pl-4 font-black">
                   إجمالي التحصيلات المقبوضة:
                 </td>
-                <td className="border border-slate-300 p-2.5 text-center text-emerald-800 text-sm">
-                  {currentMonthPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()} ج.م
+                <td className="border border-slate-300 p-2.5 text-center text-emerald-800 text-sm font-black">
+                  {sortedFilteredPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()} ج.م
                 </td>
                 <td className="border border-slate-300 p-2.5"></td>
               </tr>
             </tfoot>
           )}
         </table>
+
+        <div className="mt-4 pt-3 border-t border-slate-200 text-center text-[11px] text-slate-400 font-semibold">
+          تم استخراج هذا التقرير تلقائياً ومطابق تماماً للبيانات والشروط النشطة على الشاشة • اتحاد ملاك عمارة بيراميدز فيو ١
+        </div>
       </div>
+
+      {/* Share Report Modal */}
+      <ShareReportModal
+        isOpen={shareReportModal.isOpen}
+        onClose={() => setShareReportModal((prev) => ({ ...prev, isOpen: false }))}
+        imageBlob={shareReportModal.imageBlob}
+        imageDataUrl={shareReportModal.imageDataUrl}
+        fileName={shareReportModal.fileName}
+        reportTitle="تقرير تحصيلات معتمد"
+        reportPeriodText={shareReportModal.reportPeriodText}
+        reportStatsText={shareReportModal.reportStatsText}
+        residents={residents}
+        initialResidentId={shareReportModal.initialResidentId}
+        onSuccessToast={(msg) => {
+          setToastMsg(msg);
+          setTimeout(() => setToastMsg(null), 8000);
+        }}
+      />
     </div>
   );
 };

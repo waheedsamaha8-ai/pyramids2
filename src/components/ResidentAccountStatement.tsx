@@ -851,15 +851,17 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
           {/* Months Table - Full Width with Compact Columns & Sticky First Column */}
           <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-2xs w-full bg-white">
             <div className="overflow-x-auto w-full">
-              <table className="w-full min-w-[700px] text-right border-collapse text-xs">
+              <table className="w-full min-w-[640px] text-right border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50/90 text-slate-600 font-extrabold text-[11px] border-b border-slate-100">
-                    <th className="sticky right-0 z-20 bg-slate-50 px-2.5 py-2.5 whitespace-nowrap text-right min-w-[105px] w-28 border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)]">
+                    <th className="sticky right-0 z-20 bg-slate-50 px-1 py-2 whitespace-nowrap text-center w-12 sm:w-14 min-w-[48px] max-w-[54px] border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)] text-[10px] sm:text-[11px]">
                       الشهور
                     </th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">الاشتراك</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-right">المسدد</th>
-                    <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">فئة التحصيل</th>
+                    <th className="px-0.5 py-2 whitespace-nowrap text-center w-14 sm:w-16 min-w-[50px] max-w-[62px] text-[9px] sm:text-[10px]">
+                      فئة التحصيل
+                    </th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">حالة السداد</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center sm:text-right">رقم الإيصال</th>
                     <th className="px-2 py-2 sm:px-2.5 sm:py-2.5 whitespace-nowrap text-center">صورة الإيصال</th>
@@ -880,12 +882,10 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
 
                     return (
                       <tr className={rowBg}>
-                        <td className={`sticky right-0 z-10 ${isNeg ? 'bg-amber-50' : isPos ? 'bg-teal-50' : 'bg-slate-50'} px-2.5 py-2 whitespace-nowrap leading-tight border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)]`}>
-                          <div className="flex items-center gap-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isNeg ? 'bg-amber-500' : isPos ? 'bg-teal-500' : 'bg-slate-300'}`} />
-                            <span className="font-bold text-[11px] text-slate-700">
-                              {isCarried ? `رصيد سابق مرحل (${currentYear - 1})` : 'رصيد سابق'}
-                            </span>
+                        <td className={`sticky right-0 z-10 ${isNeg ? 'bg-amber-50' : isPos ? 'bg-teal-50' : 'bg-slate-50'} px-1 py-1 whitespace-nowrap leading-tight border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)] w-12 sm:w-14 min-w-[48px] max-w-[54px] text-center`}>
+                          <div className="flex flex-col items-center justify-center leading-none py-0.5">
+                            <span className="font-black text-slate-900 text-[11px]">رصيد</span>
+                            <span className="text-[10px] font-black text-slate-600 mt-0.5">سابق</span>
                           </div>
                         </td>
                         <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap font-bold text-xs sm:text-[13px]">
@@ -894,9 +894,9 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                         <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap font-bold text-xs sm:text-[13px]">
                           {isPos ? `${initBal.toLocaleString()} ج.م` : '0 ج.م'}
                         </td>
-                        <td className="px-2.5 py-2 whitespace-nowrap text-center text-xs">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200/80 rounded-md text-[10px] font-bold">
-                            {isCarried ? 'رصيد مرحل' : 'تسوية رصيد سابق'}
+                        <td className="px-0.5 py-1 whitespace-nowrap text-center text-xs w-14 sm:w-16 min-w-[50px] max-w-[62px]">
+                          <span className="px-1 py-0.5 bg-slate-100 text-slate-700 border border-slate-200/80 rounded text-[9px] font-bold inline-block truncate max-w-[58px]" title={isCarried ? 'رصيد مرحل' : 'تسوية رصيد'}>
+                            {isCarried ? 'مرحل' : 'تسوية'}
                           </span>
                         </td>
                         <td className="px-2 py-1.5 sm:px-2.5 sm:py-2 whitespace-nowrap text-center">
@@ -937,11 +937,11 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                   ) : (
                     displayedMonths.map((m, idx) => (
                       <tr key={idx} className={`group hover:bg-slate-50/70 transition ${!m.isPaid ? 'bg-rose-50/20' : ''}`}>
-                        <td className={`sticky right-0 z-10 ${!m.isPaid ? 'bg-[#fef8f8] group-hover:bg-[#fcf2f2]' : 'bg-white group-hover:bg-slate-50'} px-2.5 py-2 whitespace-nowrap leading-tight border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)]`}>
+                        <td className={`sticky right-0 z-10 ${!m.isPaid ? 'bg-[#fef8f8] group-hover:bg-[#fcf2f2]' : 'bg-white group-hover:bg-slate-50'} px-1 py-1 whitespace-nowrap leading-tight border-l border-slate-200/80 shadow-[-2px_0_4px_rgba(0,0,0,0.03)] w-12 sm:w-14 min-w-[48px] max-w-[54px] text-center`}>
                           <div className="font-bold text-slate-900 text-xs">
                             {monthNamesArabic[m.monthNum - 1]}
                           </div>
-                          <div className="text-[10px] font-medium text-slate-400 leading-none mt-0.5">
+                          <div className="text-[9px] font-medium text-slate-400 leading-none mt-0.5">
                             {m.year}
                           </div>
                         </td>
@@ -953,13 +953,14 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                             {m.paidAmount > 0 ? `${m.paidAmount.toLocaleString()} ج.م` : '0 ج.م'}
                           </span>
                         </td>
-                        <td className="px-2.5 py-2 whitespace-nowrap text-center text-xs">
+                        <td className="px-0.5 py-1 whitespace-nowrap text-center text-xs w-14 sm:w-16 min-w-[50px] max-w-[62px]">
                           {m.matchingPayments.length > 0 ? (
-                            <div className="flex items-center justify-center flex-wrap gap-1">
+                            <div className="flex items-center justify-center flex-wrap gap-0.5">
                               {Array.from(new Set(m.matchingPayments.map(p => p.paymentType || 'اشتراك شهري'))).map((type, tIdx) => (
                                 <span
                                   key={tIdx}
-                                  className="px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200/80 rounded-md text-[10px] font-bold"
+                                  className="px-1 py-0.5 bg-blue-50 text-blue-900 border border-blue-200/80 rounded text-[9px] font-bold inline-block truncate max-w-[58px]"
+                                  title={type}
                                 >
                                   {type}
                                 </span>
@@ -1131,13 +1132,13 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
           <h2 className="font-black text-slate-800 text-xs mb-2">جدول المحاسبة والمطالبات الشهري ({monthsTimeline.length} شهر)</h2>
           <table className="w-full text-right border-collapse border border-slate-400 text-xs mb-6">
             <thead>
-              <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-400">
-                <th className="border border-slate-400 p-2">الشهر والسنة</th>
-                <th className="border border-slate-400 p-2 text-center">قيمة الاشتراك</th>
-                <th className="border border-slate-400 p-2 text-center">المبلغ المسدد</th>
-                <th className="border border-slate-400 p-2 text-center">فئة التحصيل</th>
-                <th className="border border-slate-400 p-2 text-center">حالة السداد</th>
-                <th className="border border-slate-400 p-2 text-center">تفاصيل التحصيل ورقم الإيصال</th>
+              <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-400 text-[11px]">
+                <th className="border border-slate-400 p-1 text-center w-14">الشهر</th>
+                <th className="border border-slate-400 p-1.5 text-center">قيمة الاشتراك</th>
+                <th className="border border-slate-400 p-1.5 text-center">المبلغ المسدد</th>
+                <th className="border border-slate-400 p-1 text-center w-16 text-[10px]">فئة التحصيل</th>
+                <th className="border border-slate-400 p-1.5 text-center">حالة السداد</th>
+                <th className="border border-slate-400 p-1.5 text-center">تفاصيل التحصيل ورقم الإيصال</th>
               </tr>
             </thead>
             <tbody>
@@ -1149,8 +1150,11 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                 const isCarried = currentYear > startYear;
                 return (
                   <tr className={isNeg ? 'bg-amber-50/70 font-bold' : isPos ? 'bg-teal-50/70 font-bold' : 'bg-slate-50/70'}>
-                    <td className="border border-slate-400 p-2 font-black text-slate-800">
-                      {isCarried ? `رصيد سابق مرحل (${currentYear - 1})` : 'رصيد سابق'}
+                    <td className="border border-slate-400 p-1 text-center font-black text-slate-800 leading-tight w-14">
+                      <div className="text-xs font-black">رصيد</div>
+                      <div className="text-[10px] font-black text-slate-700 mt-0.5">
+                        سابق
+                      </div>
                     </td>
                     <td className="border border-slate-400 p-2 text-center font-bold">
                       {isNeg ? `${Math.abs(initBal).toLocaleString()} ج.م` : '0 ج.م'}
@@ -1158,8 +1162,8 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
                     <td className="border border-slate-400 p-2 text-center font-bold text-teal-700">
                       {isPos ? `${initBal.toLocaleString()} ج.م` : '0 ج.م'}
                     </td>
-                    <td className="border border-slate-400 p-2 text-center text-xs font-bold text-slate-700">
-                      {isCarried ? 'رصيد مرحل' : 'تسوية رصيد سابق'}
+                    <td className="border border-slate-400 p-1 text-center text-[10px] font-bold text-slate-700 w-16">
+                      {isCarried ? 'مرحل' : 'تسوية'}
                     </td>
                     <td className="border border-slate-400 p-2 text-center font-bold">
                       {isNeg ? (

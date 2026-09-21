@@ -69,6 +69,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
   // Local draft of floor configs inside the structure modal
   const [localFloorConfigs, setLocalFloorConfigs] = useState<FloorConfig[]>([]);
   const [newUnitInputs, setNewUnitInputs] = useState<Record<string, string>>({});
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const [subTab, setSubTab] = useState<'residents' | 'join-requests'>('residents');
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
@@ -462,8 +463,8 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
   const removeUnitFromFloorConfig = (floorId: string, unitNum: number | string) => {
     setLocalFloorConfigs(prev => prev.map(f => {
       if (f.id !== floorId) return f;
-      const currentUnits = getUnitNumbersForFloor(f, residents);
-      const filtered = currentUnits.filter(u => !isSameFlatNumber(u, unitNum));
+      const currentUnits = Array.isArray(f.unitNumbers) ? f.unitNumbers : getUnitNumbersForFloor(f, residents);
+      const filtered = currentUnits.filter(u => !isSameFlatNumber(u, unitNum) && String(u).trim() !== String(unitNum).trim());
       return {
         ...f,
         unitNumbers: filtered,
@@ -473,14 +474,29 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
     }));
   };
 
-  // Surgically add a single unit to a floor within the modal
-  const addUnitToFloorConfig = (floorId: string, unitNum: number | string) => {
-    if (!unitNum) return;
+  // Surgically add a single unit to a floor within the modal (accepts numbers, 502-2, 502/2, etc.)
+  const addUnitToFloorConfig = (floorId: string, inputRaw: number | string) => {
+    if (inputRaw === undefined || inputRaw === null) return;
+    let str = String(inputRaw).trim();
+    if (!str) return;
+
+    // Normalize Eastern Arabic numerals:
+    const standardDigits: Record<string, string> = {
+      '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+      '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
+    };
+    str = str.replace(/[٠-٩۰-۹]/g, (char) => standardDigits[char] || char);
+
+    const cleanUnit: number | string = /^\d+$/.test(str) ? parseInt(str, 10) : str;
+
     setLocalFloorConfigs(prev => prev.map(f => {
       if (f.id !== floorId) return f;
-      const currentUnits = getUnitNumbersForFloor(f, residents);
-      if (currentUnits.some(u => isSameFlatNumber(u, unitNum))) return f;
-      const merged = [...currentUnits, unitNum].sort(compareFlatNumbers);
+      const currentUnits = Array.isArray(f.unitNumbers) ? f.unitNumbers : getUnitNumbersForFloor(f, residents);
+      if (currentUnits.some(u => isSameFlatNumber(u, cleanUnit) || String(u).trim() === String(cleanUnit).trim())) {
+        alert(`الوحدة "${cleanUnit}" مسجلة بالفعل في هذا الدور`);
+        return f;
+      }
+      const merged = [...currentUnits, cleanUnit].sort(compareFlatNumbers);
       return {
         ...f,
         unitNumbers: merged,
@@ -491,13 +507,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
     setNewUnitInputs(prev => ({ ...prev, [floorId]: '' }));
   };
 
-  // 1. Save Structure only without altering existing residents
-  const handleSaveStructureOnly = () => {
-    onSetFloorConfigs(localFloorConfigs);
-    setShowConfigModal(false);
-  };
-
-  // 2. Generate residents from structure (overwrites residents list with the exact units)
+  // Generate residents from structure AND save structure simultaneously, with alert confirmation
   const handleGenerateBuilding = () => {
     if (localFloorConfigs.length === 0) {
       alert('الرجاء إضافة أدوار أولاً لتوليد الوحدات.');
@@ -511,15 +521,15 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
 
     // Existing residents map to preserve user-customized occupant names & phones if they exist
     const existingMap = new Map<string, Resident>();
-    residents.forEach(r => existingMap.set(String(r.flatNumber), r));
+    residents.forEach(r => existingMap.set(String(r.flatNumber).trim(), r));
 
     localFloorConfigs.forEach((configItem, floorIndex) => {
       const unitFee = getDefaultFeeForActivity(configItem.activityType);
-      const floorUnits = getUnitNumbersForFloor(configItem, residents);
+      const floorUnits = Array.isArray(configItem.unitNumbers) ? configItem.unitNumbers : getUnitNumbersForFloor(configItem, residents);
       
       floorUnits.forEach((unitId, j) => {
         const isPresidentUnit = isSameFlatNumber(unitId, presFlat);
-        const unitStr = String(unitId);
+        const unitStr = String(unitId).trim();
 
         if (isPresidentUnit && presidentProfile) {
           presidentAssigned = true;
@@ -542,29 +552,39 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
           const existing = existingMap.get(unitStr)!;
           newResidents.push({
             ...existing,
+            flatNumber: unitId,
             monthlyFee: existing.monthlyFee || unitFee,
           });
         } else {
-          newResidents.push({
-            id: `res_gen_${unitId}_${Date.now()}_${floorIndex}_${j}`,
-            flatNumber: unitId,
-            name: `شاغل ${configItem.activityType} ${unitId}`,
-            activityType: configItem.activityType,
-            phone: '',
-            notes: '',
-            ownershipType: 'تمليك',
-            tenantName: '',
-            tenantPhone: '',
-            monthlyFee: unitFee,
-            initialBalance: 0,
-          });
+          const matchedResident = residents.find(r => isSameFlatNumber(r.flatNumber, unitId));
+          if (matchedResident) {
+            newResidents.push({
+              ...matchedResident,
+              flatNumber: unitId,
+              monthlyFee: matchedResident.monthlyFee || unitFee,
+            });
+          } else {
+            newResidents.push({
+              id: `res_gen_${unitId}_${Date.now()}_${floorIndex}_${j}`,
+              flatNumber: unitId,
+              name: `شاغل ${configItem.activityType} ${unitId}`,
+              activityType: configItem.activityType,
+              phone: '',
+              notes: '',
+              ownershipType: 'تمليك',
+              tenantName: '',
+              tenantPhone: '',
+              monthlyFee: unitFee,
+              initialBalance: 0,
+            });
+          }
         }
       });
     });
 
     // If president unit was not within generated standard loops, explicitly add their unit (e.g. 207)
     if (presidentProfile && !presidentAssigned) {
-      const presStr = String(presFlat);
+      const presStr = String(presFlat).trim();
       newResidents.push({
         id: existingMap.get(presStr)?.id || `res_president_${presFlat}_${Date.now()}`,
         flatNumber: presFlat,
@@ -580,19 +600,42 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
           : getDefaultFeeForActivity(presidentProfile.activityType || 'سكني'),
         initialBalance: presidentProfile.initialBalance !== undefined ? Number(presidentProfile.initialBalance) : (existingMap.get(presStr)?.initialBalance || 0),
       });
-      // Sort in numerical flat order
       newResidents.sort((a, b) => compareFlatNumbers(a.flatNumber, b.flatNumber));
     }
 
-    setConfirmData({
-      type: 'generate',
-      generatedResidents: newResidents,
-      structureToSave: localFloorConfigs
-    });
+    // 1. Save building structure directly
+    onSetFloorConfigs(localFloorConfigs);
+
+    // 2. Generate and update all residents
+    onSetAll(newResidents);
+
+    // 3. Close the modal
+    setShowConfigModal(false);
+
+    // 4. Alert user & toast notification confirming saving and generation
+    const confirmMsg = `تم الحفظ وتوليد الوحدات بنجاح!\nتم اعتماد هيكل العمارة وتوليد كشف الوحدات بإجمالي (${newResidents.length}) وحدة سكنية.`;
+    setToastMsg(`تم الحفظ وتوليد الوحدات بنجاح! تم اعتماد هيكل العمارة وتحديث كشف الوحدات بإجمالي (${newResidents.length}) وحدة.`);
+    setTimeout(() => setToastMsg(null), 8000);
+    alert(confirmMsg);
   };
 
   return (
     <div className="space-y-4 text-right" dir="rtl">
+      {/* Toast Feedback Banner */}
+      {toastMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-start gap-2 animate-fade-in shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 leading-relaxed">{toastMsg}</div>
+          <button 
+            type="button"
+            onClick={() => setToastMsg(null)} 
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-1 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Tab Selector for Admin / Union President */}
       {role === 'ADMIN' && (
         <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-xs gap-2">
@@ -1558,7 +1601,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
             <div className="flex-1 overflow-y-auto pr-1 space-y-4 mb-4">
               <div className="bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100/60">
                 <p className="text-[11px] text-blue-950 font-bold leading-relaxed">
-                  يتم تخزين هيكل العمارة لتغذية خريطة السداد التفاعلية وتوزيع الوحدات. يمكنك تعديل الأدوار والوحدات وحفظ الهيكل مباشرة، أو توليد كشف وحدات جديد بناءً عليه.
+                  يمكنك تعديل الأدوار وإضافة وحذف الوحدات لكل دور بكل سهولة (تقبل صيغ مثل 502-2 و 502/2). عند الضغط على زر «توليد كشف وحدات» بالأسفل، يتم حفظ الهيكل المعتمد وتوليد كشف الوحدات والسكان معاً تلقائياً.
                 </p>
               </div>
 
@@ -1652,7 +1695,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                               key={unitNum} 
                               className="inline-flex items-center gap-1 px-2 py-0.5 bg-white text-slate-800 rounded-md border border-slate-200 text-[11px] font-black shadow-2xs group/chip hover:border-rose-300 transition"
                             >
-                              <span>{unitNum}</span>
+                              <span dir="ltr">{unitNum}</span>
                               <button
                                 type="button"
                                 onClick={() => removeUnitFromFloorConfig(floor.id, unitNum)}
@@ -1665,28 +1708,30 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                           ))
                         )}
 
-                        <div className="inline-flex items-center gap-1 mr-auto mt-1 sm:mt-0">
+                        <div className="inline-flex items-center gap-1.5 mr-auto mt-1 sm:mt-0">
                           <input 
-                            type="number"
-                            placeholder="رقم وحدة جديد"
+                            type="text"
+                            placeholder="مثال: 502-2 أو 502/2"
                             value={currentInputVal}
                             onChange={(e) => setNewUnitInputs(prev => ({ ...prev, [floor.id]: e.target.value }))}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
-                                addUnitToFloorConfig(floor.id, parseInt(currentInputVal));
+                                addUnitToFloorConfig(floor.id, currentInputVal);
                               }
                             }}
-                            className="w-24 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md text-[10px] font-bold outline-none text-center"
+                            className="w-36 sm:w-44 px-2 py-1 bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs font-bold outline-none text-center placeholder:text-[10px] placeholder:font-normal placeholder:text-slate-400"
+                            dir="ltr"
                           />
                           <button
                             type="button"
-                            onClick={() => addUnitToFloorConfig(floor.id, parseInt(currentInputVal))}
-                            disabled={!currentInputVal}
-                            className="px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200 hover:bg-blue-100 disabled:opacity-40 rounded-md text-[10px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                            onClick={() => addUnitToFloorConfig(floor.id, currentInputVal)}
+                            disabled={!currentInputVal || !currentInputVal.trim()}
+                            className="px-3 py-1 bg-blue-900 text-white hover:bg-blue-950 disabled:bg-slate-200 disabled:text-slate-400 rounded-lg text-xs font-black transition flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                            title="إضافة هذه الوحدة للدور (يقبل 502-2 و 502/2 والأرقام العادية)"
                           >
-                            <Plus className="w-3 h-3" />
-                            <span>إضافة</span>
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>إضافة وحدة</span>
                           </button>
                         </div>
                       </div>
@@ -1707,28 +1752,22 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
             {/* Modal Actions */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-4 border-t border-slate-100">
               <button 
+                type="button"
                 onClick={() => setShowConfigModal(false)}
-                className="w-full sm:w-auto px-4 py-2 text-slate-500 font-bold text-xs hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 text-slate-500 hover:text-slate-800 font-bold text-xs hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
                 إلغاء
               </button>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button 
-                  onClick={handleSaveStructureOnly}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-black transition active:scale-[0.98] shadow-xs cursor-pointer"
-                >
-                  <Save className="w-4 h-4 text-emerald-400" />
-                  <span>حفظ هيكل العمارة</span>
-                </button>
-
-                <button 
-                  onClick={handleGenerateBuilding}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-900 text-white rounded-xl font-bold text-xs hover:bg-blue-950 transition shadow-md active:scale-[0.98] cursor-pointer"
-                >
-                  <span>توليد كشف وحدات جديد</span>
-                </button>
-              </div>
+              <button 
+                type="button"
+                onClick={handleGenerateBuilding}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-900 text-white hover:bg-blue-950 rounded-xl font-black text-xs transition shadow-md active:scale-[0.98] cursor-pointer"
+                title="حفظ هيكل العمارة وتوليد كشف الوحدات والسكان معاً"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>توليد كشف وحدات</span>
+              </button>
             </div>
           </div>
         </div>

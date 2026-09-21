@@ -3384,6 +3384,7 @@ export default function App() {
             expenseTypes={config.expenseTypes}
             role={role}
             currentYear={currentYear}
+            residents={residents}
             onAdd={addExpense}
             onEdit={editExpense}
             onDelete={deleteExpense}
