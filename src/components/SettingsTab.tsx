@@ -61,7 +61,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     setIsCheckingFolders(true);
     setFolderSyncMessage(null);
     try {
-      const updated = await googleApi.ensureDriveFoldersStructure();
+      const updated = await googleApi.ensureDriveFoldersStructure(true);
       setDriveFolders(updated);
       setFolderSyncMessage('تم فحص ومزامنة كافة مجلدات Google Drive وجداول Google Sheets المرتبطة بحساب رئيس الاتحاد بنجاح!');
       setTimeout(() => setFolderSyncMessage(null), 5000);

@@ -215,13 +215,25 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
     return {};
   }
 
-  const headers = {
-    'Content-Type': 'application/json',
+  const hasBody = options.body !== undefined && options.body !== null;
+  const headers: Record<string, string> = {
     'Authorization': `Bearer ${currentAccessToken}`,
-    ...(options.headers || {}),
+    ...(options.headers as Record<string, string> || {}),
   };
+  if (hasBody && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
-  const response = await fetch(url, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (networkError: any) {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const msg = networkError?.message || 'Failed to fetch';
+    console.warn(`[Google API Network] ${isOffline ? 'Device is offline' : 'Fetch failed'} (${url}):`, msg);
+    throw new Error(`Google API Network Error: ${msg}`);
+  }
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     const errorMessage = errorData?.error?.message || response.statusText;
@@ -1496,7 +1508,7 @@ export function getCachedDriveFolders(): DriveFoldersMap | null {
   return null;
 }
 
-export async function ensureDriveFoldersStructure(): Promise<DriveFoldersMap> {
+export async function ensureDriveFoldersStructure(forceRefresh = false): Promise<DriveFoldersMap> {
   const ROOT_FOLDER_NAME = 'اتحاد ملاك بيراميدز فيو ١ - Pyramids View 1';
   const SUBFOLDERS: Record<string, string> = {
     sheets: 'قواعد البيانات والجداول',
@@ -1506,26 +1518,41 @@ export async function ensureDriveFoldersStructure(): Promise<DriveFoldersMap> {
     chat: 'صور ومرفقات المحادثات',
   };
 
-  if (!currentAccessToken || currentAccessToken === 'local-token') {
-    const fallbackMap: DriveFoldersMap = {
-      rootFolderId: 'local-root-folder',
-      rootFolderUrl: 'https://drive.google.com/',
-      sheetsFolderId: 'local-sheets-folder',
-      sheetsFolderUrl: 'https://drive.google.com/',
-      receiptsFolderId: 'local-receipts-folder',
-      receiptsFolderUrl: 'https://drive.google.com/',
-      expensesFolderId: 'local-expenses-folder',
-      expensesFolderUrl: 'https://drive.google.com/',
-      complaintsFolderId: 'local-complaints-folder',
-      complaintsFolderUrl: 'https://drive.google.com/',
-      chatFolderId: 'local-chat-folder',
-      chatFolderUrl: 'https://drive.google.com/',
-      spreadsheetId: spreadsheetId || 'local-spreadsheet',
-      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId || 'local-spreadsheet'}/edit`,
-    };
+  const fallbackMap: DriveFoldersMap = {
+    rootFolderId: 'local-root-folder',
+    rootFolderUrl: 'https://drive.google.com/',
+    sheetsFolderId: 'local-sheets-folder',
+    sheetsFolderUrl: 'https://drive.google.com/',
+    receiptsFolderId: 'local-receipts-folder',
+    receiptsFolderUrl: 'https://drive.google.com/',
+    expensesFolderId: 'local-expenses-folder',
+    expensesFolderUrl: 'https://drive.google.com/',
+    complaintsFolderId: 'local-complaints-folder',
+    complaintsFolderUrl: 'https://drive.google.com/',
+    chatFolderId: 'local-chat-folder',
+    chatFolderUrl: 'https://drive.google.com/',
+    spreadsheetId: spreadsheetId || 'local-spreadsheet',
+    spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId || 'local-spreadsheet'}/edit`,
+  };
+
+  // If not forcing a refresh, reuse cached folder structure if available
+  if (!forceRefresh) {
+    const existing = getCachedDriveFolders();
+    if (existing && existing.rootFolderId && existing.rootFolderId !== 'local-root-folder' && existing.receiptsFolderId) {
+      return existing;
+    }
+  }
+
+  if (!currentAccessToken || currentAccessToken === 'local-token' || currentAccessToken.startsWith('local-')) {
     cachedDriveFolders = fallbackMap;
     localStorage.setItem('pyramids_drive_folders_v1', JSON.stringify(fallbackMap));
     return fallbackMap;
+  }
+
+  // If offline, return cached or fallback immediately without attempting network fetch
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const cached = getCachedDriveFolders();
+    return cached || fallbackMap;
   }
 
   try {
@@ -1608,8 +1635,8 @@ export async function ensureDriveFoldersStructure(): Promise<DriveFoldersMap> {
     cachedDriveFolders = result;
     localStorage.setItem('pyramids_drive_folders_v1', JSON.stringify(result));
     return result;
-  } catch (err) {
-    console.error('Error ensuring Google Drive folders:', err);
+  } catch (err: any) {
+    console.warn('Notice ensuring Google Drive folders (fallback/cached used):', err?.message || err);
     // Return cached or fallback
     const cached = getCachedDriveFolders();
     if (cached) return cached;
@@ -1637,10 +1664,10 @@ export async function getCachedOrEnsureDriveFolders(forceRefresh = false): Promi
     const cached = getCachedDriveFolders();
     if (cached && cached.rootFolderId && cached.spreadsheetId) return cached;
   }
-  if (!currentAccessToken || currentAccessToken === 'local-token') {
+  if (!currentAccessToken || currentAccessToken === 'local-token' || currentAccessToken.startsWith('local-')) {
     return getCachedDriveFolders();
   }
-  return await ensureDriveFoldersStructure();
+  return await ensureDriveFoldersStructure(forceRefresh);
 }
 
 // 2. Google Drive File Upload Service
