@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Resident } from '../types';
 import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
-import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
+import { formatMobileNumber, normalizePhoneInput, toWhatsAppNumber } from '../utils/phoneUtils';
 import { 
   X, 
   Share2, 
@@ -287,9 +287,10 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
                 <div className="relative">
                   <input
                     type="tel"
-                    placeholder="رقم الهاتف (مثال: 01007911777 أو اتركه فارغاً لمجموعة واتساب)"
+                    placeholder="رقم الهاتف (مثال: 01007911777 أو +966539313467 أو اتركه فارغاً لمجموعة واتساب)"
                     value={customPhone}
-                    onChange={(e) => setCustomPhone(e.target.value)}
+                    onChange={(e) => setCustomPhone(normalizePhoneInput(e.target.value))}
+                    onBlur={() => setCustomPhone(formatMobileNumber(customPhone))}
                     className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-bold outline-none text-left font-mono placeholder:text-right placeholder:font-sans"
                     dir="ltr"
                   />

@@ -19,6 +19,15 @@ import { fetchAllJoinRequests } from './authStore';
 import { formatMobileNumber } from '../utils/phoneUtils';
 import { isSameFlatNumber } from '../utils/buildingStructure';
 
+function formatPhoneForSheet(phone: string | number | null | undefined): string {
+  const formatted = formatMobileNumber(phone);
+  if (!formatted) return '';
+  if (formatted.startsWith('+')) {
+    return `'${formatted}`;
+  }
+  return formatted;
+}
+
 let currentAccessToken: string | null = null;
 let spreadsheetId: string | null = null;
 let sheetIds: { [title: string]: number } = {};
@@ -801,11 +810,11 @@ export async function addResidentSheet(resident: Resident): Promise<void> {
     resident.flatNumber.toString(),
     resident.name,
     resident.activityType,
-    formatMobileNumber(resident.phone || ''),
+    formatPhoneForSheet(resident.phone || ''),
     resident.notes || '',
     resident.ownershipType || 'تمليك',
     resident.tenantName || '',
-    formatMobileNumber(resident.tenantPhone || ''),
+    formatPhoneForSheet(resident.tenantPhone || ''),
     (resident.monthlyFee ?? '').toString(),
     (resident.initialBalance ?? 0).toString(),
   ];
@@ -826,11 +835,11 @@ export async function setAllResidentsSheet(residents: Resident[]): Promise<void>
       r.flatNumber.toString(),
       r.name,
       r.activityType,
-      formatMobileNumber(r.phone || ''),
+      formatPhoneForSheet(r.phone || ''),
       r.notes || '',
       r.ownershipType || 'تمليك',
       r.tenantName || '',
-      formatMobileNumber(r.tenantPhone || ''),
+      formatPhoneForSheet(r.tenantPhone || ''),
       (r.monthlyFee ?? '').toString(),
       (r.initialBalance ?? 0).toString(),
     ])
@@ -891,11 +900,11 @@ export async function editResidentSheet(resident: Resident): Promise<void> {
     resident.flatNumber.toString(),
     resident.name,
     resident.activityType,
-    resident.phone || '',
+    formatPhoneForSheet(resident.phone || ''),
     resident.notes || '',
     resident.ownershipType || 'تمليك',
     resident.tenantName || '',
-    resident.tenantPhone || '',
+    formatPhoneForSheet(resident.tenantPhone || ''),
     (resident.monthlyFee ?? '').toString(),
     (resident.initialBalance ?? 0).toString(),
   ]];
@@ -1733,7 +1742,7 @@ export async function addCraftsmanSheet(craftsman: Craftsman) {
   if (!spreadsheetId) throw new Error('Spreadsheet not initialized');
   const commentsJson = craftsman.comments && craftsman.comments.length > 0 ? JSON.stringify(craftsman.comments) : '[]';
   const values = [
-    [craftsman.id, craftsman.name, craftsman.specialty, formatMobileNumber(craftsman.phone), craftsman.notes || '', craftsman.addedBy, commentsJson]
+    [craftsman.id, craftsman.name, craftsman.specialty, formatPhoneForSheet(craftsman.phone), craftsman.notes || '', craftsman.addedBy, commentsJson]
   ];
   await appendSheetRow('Craftsmen', values);
   cache.craftsmen.expiry = 0;
@@ -1748,7 +1757,7 @@ export async function editCraftsmanSheet(craftsman: Craftsman) {
   const commentsJson = craftsman.comments && craftsman.comments.length > 0 ? JSON.stringify(craftsman.comments) : '[]';
   const range = `Craftsmen!A${rowIndex + 2}:G${rowIndex + 2}`;
   const values = [
-    [craftsman.id, craftsman.name, craftsman.specialty, formatMobileNumber(craftsman.phone), craftsman.notes || '', craftsman.addedBy, commentsJson]
+    [craftsman.id, craftsman.name, craftsman.specialty, formatPhoneForSheet(craftsman.phone), craftsman.notes || '', craftsman.addedBy, commentsJson]
   ];
   await writeSheetRange(range, values);
   cache.craftsmen.expiry = 0;
@@ -2268,9 +2277,9 @@ export async function addJoinRequest(req: JoinRequest): Promise<void> {
     req.flatNumber.toString(),
     req.residentType,
     req.ownerName,
-    formatMobileNumber(req.ownerPhone),
+    formatPhoneForSheet(req.ownerPhone),
     req.tenantName,
-    formatMobileNumber(req.tenantPhone),
+    formatPhoneForSheet(req.tenantPhone),
     req.email.toLowerCase().trim(),
     req.password || '',
     req.status,

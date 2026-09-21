@@ -790,11 +790,11 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
                   <input
                     type="tel"
                     dir="ltr"
-                    placeholder="مثال: 01012345678"
+                    placeholder="مثال: 01012345678 أو +966539313467"
                     value={craftsmanPhone}
                     onChange={(e) => setCraftsmanPhone(normalizePhoneInput(e.target.value))}
                     onBlur={() => setCraftsmanPhone(formatMobileNumber(craftsmanPhone))}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-bold outline-none focus:border-blue-500 transition text-right"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-mono font-bold outline-none focus:border-blue-500 transition text-left placeholder:text-right placeholder:font-sans"
                     required
                   />
                 </div>
@@ -1026,10 +1026,11 @@ export const MaintenanceRequests: React.FC<MaintenanceRequestsProps> = ({
                   <input
                     type="tel"
                     dir="ltr"
+                    placeholder="مثال: 01012345678 أو +966539313467"
                     value={editPhone}
                     onChange={(e) => setEditPhone(normalizePhoneInput(e.target.value))}
                     onBlur={() => setEditPhone(formatMobileNumber(editPhone))}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-bold outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 transition text-right"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs font-mono font-bold outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-blue-500 transition text-left placeholder:text-right placeholder:font-sans"
                     required
                   />
                 </div>

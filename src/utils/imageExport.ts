@@ -64,10 +64,13 @@ export interface GeneratedImageResult {
 /**
  * Ultra-fast client-side image generator for printable areas with full oklch/oklab color parsing fix.
  * Returns the generated dataUrl, blob, file, and download trigger.
+ * Isolates the cloned target in the cloned document at exact specified width (default 920px)
+ * so that mobile viewports or parent responsive styles never distort or compress the report.
  */
 export async function generateElementImageBlob(
   elementId: string,
-  fileName: string
+  fileName: string,
+  customWidth: number = 920
 ): Promise<GeneratedImageResult> {
   const elem = document.getElementById(elementId);
   if (!elem) {
@@ -81,6 +84,8 @@ export async function generateElementImageBlob(
   const prevTop = elem.style.top;
   const prevWidth = elem.style.width;
   const prevZIndex = elem.style.zIndex;
+  const prevOpacity = elem.style.opacity;
+  const prevPointerEvents = elem.style.pointerEvents;
   const prevBg = elem.style.backgroundColor;
   const hadHiddenClass = elem.classList.contains('hidden');
 
@@ -88,13 +93,16 @@ export async function generateElementImageBlob(
     elem.classList.remove('hidden');
   }
 
-  // Render offscreen at fixed 850px width for clean paper document layout
+  // Temporarily position at (0,0) with target width and microscopic opacity
+  // to give html2canvas exact physical layout coordinates without user-visible flicker
   elem.style.display = 'block';
   elem.style.position = 'fixed';
-  elem.style.left = '-9999px';
-  elem.style.top = '0';
-  elem.style.width = '850px';
-  elem.style.zIndex = '-9999';
+  elem.style.left = '0px';
+  elem.style.top = '0px';
+  elem.style.width = `${customWidth}px`;
+  elem.style.zIndex = '-99999';
+  elem.style.opacity = '0.01';
+  elem.style.pointerEvents = 'none';
   elem.style.backgroundColor = '#ffffff';
 
   try {
@@ -103,20 +111,65 @@ export async function generateElementImageBlob(
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: 850,
+      width: customWidth,
+      windowWidth: Math.max(1280, customWidth),
+      scrollX: 0,
+      scrollY: 0,
+      x: 0,
+      y: 0,
       onclone: (clonedDoc) => {
         const clonedTarget = clonedDoc.getElementById(elementId);
         if (clonedTarget) {
+          // 1. Isolate the target: remove all other elements from clonedDoc.body
+          clonedDoc.body.innerHTML = '';
+
+          // 2. Set explicit document and body dimensions to prevent mobile viewport squeezing
+          clonedDoc.documentElement.style.width = `${customWidth}px`;
+          clonedDoc.documentElement.style.minWidth = `${customWidth}px`;
+          clonedDoc.documentElement.style.margin = '0';
+          clonedDoc.documentElement.style.padding = '0';
+          clonedDoc.documentElement.style.background = '#ffffff';
+          clonedDoc.documentElement.style.overflow = 'visible';
+
+          clonedDoc.body.style.width = `${customWidth}px`;
+          clonedDoc.body.style.minWidth = `${customWidth}px`;
+          clonedDoc.body.style.margin = '0';
+          clonedDoc.body.style.padding = '0';
+          clonedDoc.body.style.background = '#ffffff';
+          clonedDoc.body.style.overflow = 'visible';
+
+          // 3. Create a clean outer wrapper for the report
+          const wrapper = clonedDoc.createElement('div');
+          wrapper.id = 'report-clean-export-wrapper';
+          wrapper.style.width = `${customWidth}px`;
+          wrapper.style.minWidth = `${customWidth}px`;
+          wrapper.style.maxWidth = `${customWidth}px`;
+          wrapper.style.boxSizing = 'border-box';
+          wrapper.style.margin = '0 auto';
+          wrapper.style.padding = '0';
+          wrapper.style.background = '#ffffff';
+          wrapper.style.direction = 'rtl';
+          wrapper.style.fontFamily = 'Cairo, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif';
+
+          // 4. Style clonedTarget
           clonedTarget.classList.remove('hidden');
           clonedTarget.style.display = 'block';
+          clonedTarget.style.visibility = 'visible';
           clonedTarget.style.position = 'relative';
           clonedTarget.style.left = '0';
           clonedTarget.style.top = '0';
-          clonedTarget.style.width = '850px';
+          clonedTarget.style.width = '100%';
+          clonedTarget.style.minWidth = '100%';
+          clonedTarget.style.maxWidth = '100%';
+          clonedTarget.style.boxSizing = 'border-box';
           clonedTarget.style.backgroundColor = '#ffffff';
+          clonedTarget.style.opacity = '1';
+
+          wrapper.appendChild(clonedTarget);
+          clonedDoc.body.appendChild(wrapper);
         }
 
-        // 1. Sanitize all <style> tags in cloned document to remove/replace oklch, oklab, etc.
+        // 5. Sanitize all <style> tags in cloned document to remove/replace oklch, oklab, etc.
         const styleTags = Array.from(clonedDoc.querySelectorAll('style'));
         styleTags.forEach((styleTag) => {
           if (styleTag.textContent && /(oklch|oklab|lab|lch|hwb|color)\(/i.test(styleTag.textContent)) {
@@ -124,7 +177,7 @@ export async function generateElementImageBlob(
           }
         });
 
-        // 2. Sanitize all inline style attributes across cloned document
+        // 6. Sanitize all inline style attributes across cloned document
         const allClonedElements = Array.from(clonedDoc.querySelectorAll('*'));
         allClonedElements.forEach((node) => {
           const htmlEl = node as HTMLElement;
@@ -134,13 +187,13 @@ export async function generateElementImageBlob(
           }
         });
 
-        // 3. Sanitize computed styles for all elements in the target printable container
+        // 7. Sanitize computed styles for all elements in the target printable container
         const origElem = document.getElementById(elementId);
-        const clonedElem = clonedDoc.getElementById(elementId);
+        const finalClonedElem = clonedDoc.getElementById(elementId);
 
-        if (origElem && clonedElem) {
+        if (origElem && finalClonedElem) {
           const origNodes = [origElem, ...Array.from(origElem.querySelectorAll('*'))] as HTMLElement[];
-          const clonedNodes = [clonedElem, ...Array.from(clonedElem.querySelectorAll('*'))] as HTMLElement[];
+          const clonedNodes = [finalClonedElem, ...Array.from(finalClonedElem.querySelectorAll('*'))] as HTMLElement[];
 
           const colorProps = [
             'color',
@@ -214,6 +267,8 @@ export async function generateElementImageBlob(
     elem.style.top = prevTop;
     elem.style.width = prevWidth;
     elem.style.zIndex = prevZIndex;
+    elem.style.opacity = prevOpacity;
+    elem.style.pointerEvents = prevPointerEvents;
     elem.style.backgroundColor = prevBg;
   }
 }
@@ -221,7 +276,7 @@ export async function generateElementImageBlob(
 /**
  * Ultra-fast client-side image generator for printable areas that directly downloads the file.
  */
-export async function generateElementImage(elementId: string, fileName: string): Promise<void> {
-  const result = await generateElementImageBlob(elementId, fileName);
+export async function generateElementImage(elementId: string, fileName: string, customWidth: number = 920): Promise<void> {
+  const result = await generateElementImageBlob(elementId, fileName, customWidth);
   result.download();
 }

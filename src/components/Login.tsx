@@ -754,8 +754,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                           value={ownerPhone}
                           onChange={(e) => setOwnerPhone(normalizePhoneInput(e.target.value))}
                           onBlur={() => setOwnerPhone(formatMobileNumber(ownerPhone))}
-                          placeholder="مثال: 01012345678"
-                          className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
+                          placeholder="مثال: 01012345678 أو +966539313467"
+                          className="w-full pl-4 pr-10 py-2 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-mono font-bold dark:text-white placeholder:text-right placeholder:font-sans"
                           dir="ltr"
                         />
                       </div>
@@ -789,8 +789,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                           value={tenantPhone}
                           onChange={(e) => setTenantPhone(normalizePhoneInput(e.target.value))}
                           onBlur={() => setTenantPhone(formatMobileNumber(tenantPhone))}
-                          placeholder="010..."
-                          className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-medium dark:text-white"
+                          placeholder="010... أو +966539313467"
+                          className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl focus:border-blue-900 focus:outline-none text-left font-mono font-bold dark:text-white placeholder:text-right placeholder:font-sans"
                           dir="ltr"
                         />
                       </div>

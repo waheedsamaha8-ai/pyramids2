@@ -862,7 +862,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                             <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold" dir="ltr">
                               <a
                                 href={`tel:${formatMobileNumber(res.phone)}`}
-                                className="inline-flex items-center gap-1.5 text-blue-900 hover:text-blue-700 hover:underline font-bold transition px-2 py-1 bg-blue-50/70 hover:bg-blue-100/70 rounded-lg"
+                                className="inline-flex items-center gap-1.5 text-blue-900 hover:text-blue-700 hover:underline font-bold font-mono transition px-2 py-1 bg-blue-50/70 hover:bg-blue-100/70 rounded-lg"
                                 title={`اتصال هاتفي بالمالك ${res.name}: ${formatMobileNumber(res.phone)}`}
                               >
                                 <Phone className="w-3 h-3 text-blue-900 shrink-0" />
@@ -1260,11 +1260,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                   <label className="text-[10px] font-black text-slate-600">رقم هاتف المالك / الساكن</label>
                   <input
                     type="tel"
-                    placeholder="01xxxxxxxxx"
+                    placeholder="01xxxxxxxxx أو +966539313467"
                     value={phone}
                     onChange={(e) => setPhone(normalizePhoneInput(e.target.value))}
                     onBlur={() => setPhone(formatMobileNumber(phone))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200/80 focus:bg-white rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 outline-none text-right font-bold transition"
+                    dir="ltr"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200/80 focus:bg-white rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 outline-none text-left font-mono font-bold transition placeholder:text-right placeholder:font-sans"
                   />
                 </div>
               </div>
@@ -1293,11 +1294,12 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
                       <label className="text-[10px] font-black text-amber-950">رقم تليفون المستأجر</label>
                       <input
                         type="tel"
-                        placeholder="01xxxxxxxxx"
+                        placeholder="01xxxxxxxxx أو +966539313467"
                         value={tenantPhone}
                         onChange={(e) => setTenantPhone(normalizePhoneInput(e.target.value))}
                         onBlur={() => setTenantPhone(formatMobileNumber(tenantPhone))}
-                        className="w-full px-3 py-2 bg-white border border-amber-200 focus:border-amber-500 rounded-xl text-xs outline-none text-right font-bold transition"
+                        dir="ltr"
+                        className="w-full px-3 py-2 bg-white border border-amber-200 focus:border-amber-500 rounded-xl text-xs outline-none text-left font-mono font-bold transition placeholder:text-right placeholder:font-sans"
                       />
                     </div>
                   </div>

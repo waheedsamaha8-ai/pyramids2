@@ -29,6 +29,7 @@ import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNum
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
 import { formatMobileNumber, toWhatsAppNumber } from '../utils/phoneUtils';
 import { shareImageViaWhatsApp } from '../utils/shareImageViaWhatsApp';
+import { generateElementImageBlob } from '../utils/imageExport';
 
 interface BuildingMapProps {
   residents: Resident[];
@@ -291,7 +292,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     }
   };
 
-  // Blazing Fast Native Canvas Image Generator (< 5 milliseconds!)
+  // Optional canvas fallback
   const generateNativeReceiptCanvas = (): HTMLCanvasElement => {
     const canvas = document.createElement('canvas');
     if (!financials) return canvas;
@@ -495,13 +496,12 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
     return canvas;
   };
 
-  // Direct WhatsApp Image Sharing with High-Res Canvas & Instant Feedback
+  // High-Resolution Image Generator & Direct WhatsApp Sharing for Receipts & Claim Notices
   const handleCaptureAndShareImage = async (target: 'owner' | 'tenant' = 'owner') => {
     if (!financials) return;
     setIsGeneratingImage(true);
 
     try {
-      const canvas = generateNativeReceiptCanvas();
       const flatNum = financials.resident.flatNumber;
       const isPaid = financials.currentMonthStatus === 'مسدد';
       const fileName = isPaid 
@@ -542,13 +542,8 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
           (financials.oldDebtVal > 0 ? `مديونية سابقة: ${financials.oldDebtVal.toLocaleString()} ج.م\n💰 إجمالي المستحق: ${totalDue.toLocaleString()} ج.م\n` : `💰 المبلغ المستحق: ${financials.monthlyFee.toLocaleString()} ج.م\n`) +
           `يرجى التكرم بالمبادرة بالسداد مع جزيل الشكر.`;
 
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
-      if (!blob) {
-        setIsGeneratingImage(false);
-        return;
-      }
-
-      const dataUrl = canvas.toDataURL('image/png');
+      // Generate pristine, beautifully formatted image from dedicated receipt printable element
+      const { blob, dataUrl } = await generateElementImageBlob('building-map-receipt-printable', fileName, 680);
 
       await shareImageViaWhatsApp({
         imageBlob: blob,
@@ -577,8 +572,8 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         isPaid,
       });
     } catch (err) {
-      console.error('Error generating and sharing canvas image:', err);
-      alert('حدث خطأ أثناء توليد الصورة، يُرجى المحاولة مرة أخرى.');
+      console.error('Error generating and sharing receipt image:', err);
+      alert('حدث خطأ أثناء توليد صورة الإيصال، يُرجى المحاولة مرة أخرى.');
     } finally {
       setIsGeneratingImage(false);
     }
@@ -815,7 +810,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                             <div className="flex items-center gap-2">
                               <Phone className="w-3.5 h-3.5 text-blue-900" />
                               <span className="text-[10px] text-slate-500 font-bold">هاتف المالك:</span>
-                              <span className="font-black text-slate-800 tracking-wider" dir="ltr">{formatMobileNumber(financials.resident.phone)}</span>
+                              <span className="font-black text-slate-800 tracking-wider font-mono inline-block" dir="ltr">{formatMobileNumber(financials.resident.phone)}</span>
                             </div>
                           </div>
                         )}
@@ -823,7 +818,7 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                           <div className="flex items-center justify-between text-[10px] font-bold text-amber-900">
                             <div>المستأجر: <span className="font-black">{financials.resident.tenantName}</span></div>
                             {financials.resident.tenantPhone && (
-                              <div className="font-black tracking-wider text-slate-800" dir="ltr">{formatMobileNumber(financials.resident.tenantPhone)}</div>
+                              <div className="font-black tracking-wider text-slate-800 font-mono inline-block" dir="ltr">{formatMobileNumber(financials.resident.tenantPhone)}</div>
                             )}
                           </div>
                         )}
@@ -1206,6 +1201,264 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                 <span>إغلاق</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Printable High-Fidelity Receipt & Claim Card for Image Export */}
+      {financials && (
+        <div
+          id="building-map-receipt-printable"
+          className="printable-area hidden print:block text-right font-sans bg-white"
+          dir="rtl"
+          style={{
+            width: '680px',
+            maxWidth: '680px',
+            padding: '24px',
+            backgroundColor: '#ffffff',
+            color: '#0f172a',
+            borderRadius: '16px',
+            border: '2px solid #cbd5e1',
+            boxSizing: 'border-box',
+          }}
+        >
+          {/* Official Header with Building Emblem */}
+          <div
+            style={{
+              backgroundColor: financials.currentMonthStatus === 'مسدد' ? '#047857' : '#1e3a8a',
+              color: '#ffffff',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              marginBottom: '16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ textAlign: 'right' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '900', margin: 0, padding: 0 }}>
+                {financials.currentMonthStatus === 'مسدد'
+                  ? '💐 إيصال سداد واستلام مالي معتمد'
+                  : '🏛️ إشعار مطالبة وبيان مستحقات شهرية'}
+              </h2>
+              <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px', fontWeight: '700' }}>
+                اتحاد ملاك عمارة بيراميدز فيو ١
+              </div>
+            </div>
+            <div style={{ textAlign: 'left', fontSize: '11px', fontWeight: '700', opacity: 0.95 }}>
+              <div>التاريخ: {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              <div style={{ marginTop: '3px' }}>
+                المرجع:{' '}
+                {financials.currentMonthStatus === 'مسدد'
+                  ? (financials.currentMonthPayment?.receiptNumber ? `#${financials.currentMonthPayment.receiptNumber}` : `REC-${financials.resident.flatNumber}-${selectedMonth}${currentYear}`)
+                  : `CLM-${financials.resident.flatNumber}-${selectedMonth}${currentYear}`}
+              </div>
+            </div>
+          </div>
+
+          {/* Verification Badge */}
+          <div
+            style={{
+              backgroundColor: financials.currentMonthStatus === 'مسدد' ? '#ecfdf5' : '#fffbe2',
+              border: `1px solid ${financials.currentMonthStatus === 'مسدد' ? '#10b981' : '#f59e0b'}`,
+              color: financials.currentMonthStatus === 'مسدد' ? '#065f46' : '#92400e',
+              borderRadius: '8px',
+              padding: '8px 14px',
+              fontSize: '12px',
+              fontWeight: '800',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '16px',
+            }}
+          >
+            <span>
+              {financials.currentMonthStatus === 'مسدد'
+                ? '✓ تم استلام مبلغ الاشتراك بنجاح وتوثيقه في السجل المالي المعتمد'
+                : '⏳ نأمل المبادرة بالسداد لدعم استمرار خدمات وصيانة العمارة'}
+            </span>
+            <span
+              style={{
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: financials.currentMonthStatus === 'مسدد' ? '#d1fae5' : '#fef3c7',
+                fontWeight: '900',
+                fontSize: '11px',
+              }}
+            >
+              {financials.currentMonthStatus === 'مسدد' ? 'تم السداد ✓' : 'مطالبة بالسداد ⏳'}
+            </span>
+          </div>
+
+          {/* Details Table */}
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginBottom: '16px',
+              fontSize: '12.5px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              overflow: 'hidden',
+            }}
+          >
+            <tbody>
+              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <td style={{ padding: '9px 12px', width: '22%', fontWeight: '700', color: '#64748b' }}>اسم الشاغل:</td>
+                <td style={{ padding: '9px 12px', fontWeight: '900', color: '#0f172a' }}>
+                  <span>{financials.resident.name}</span>
+                  {financials.resident.phone && (
+                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: '700', marginRight: '6px', fontFamily: 'monospace' }} dir="ltr">
+                      ({formatMobileNumber(financials.resident.phone)})
+                    </span>
+                  )}
+                </td>
+                <td style={{ padding: '9px 12px', width: '20%', fontWeight: '700', color: '#64748b' }}>رقم الوحدة:</td>
+                <td style={{ padding: '9px 12px', fontWeight: '900', color: '#1e3a8a' }}>
+                  شقة {financials.resident.flatNumber} ({financials.resident.activityType})
+                </td>
+              </tr>
+              <tr style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0' }}>
+                <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>عن شهر:</td>
+                <td style={{ padding: '9px 12px', fontWeight: '900', color: '#0f172a' }}>
+                  اشتراك {monthName} {currentYear} ({financials.monthlyFee.toLocaleString()} ج.م)
+                </td>
+                <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>نوع الإشغال:</td>
+                <td style={{ padding: '9px 12px', fontWeight: '800', color: '#334155' }}>
+                  {financials.resident.ownershipType || 'تمليك'}
+                  {financials.resident.tenantName ? ` (مستأجر: ${financials.resident.tenantName})` : ''}
+                </td>
+              </tr>
+              {financials.currentMonthStatus === 'مسدد' && (
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>تاريخ السداد:</td>
+                  <td style={{ padding: '9px 12px', fontWeight: '800', color: '#0f172a' }}>
+                    {financials.currentMonthPayment?.date || new Date().toISOString().slice(0, 10)}
+                  </td>
+                  <td style={{ padding: '9px 12px', fontWeight: '700', color: '#64748b' }}>طريقة التحصيل:</td>
+                  <td style={{ padding: '9px 12px', fontWeight: '800', color: '#047857' }}>
+                    {financials.currentMonthPayment?.paymentType || 'سداد نقدي معتمد'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* Previous Debt Notice / Clean status */}
+          {financials.oldDebtVal > 0 ? (
+            <div
+              style={{
+                backgroundColor: '#fff1f2',
+                border: '1px solid #fecdd3',
+                color: '#9f1239',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '16px',
+                fontSize: '12px',
+                fontWeight: '700',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '900', color: '#be123c', marginBottom: '3px' }}>
+                <span>⚠️ تنبيه بوجود مديونية قديمة مرحلة:</span>
+              </div>
+              <div>
+                توجد مديونية قديمة مرحلة على الوحدة قدرها:{' '}
+                <span style={{ fontWeight: '900', textDecoration: 'underline', color: '#881337' }}>
+                  {financials.oldDebtVal.toLocaleString()} ج.م
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                backgroundColor: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                color: '#065f46',
+                borderRadius: '8px',
+                padding: '8px 14px',
+                marginBottom: '16px',
+                fontSize: '11.5px',
+                fontWeight: '700',
+              }}
+            >
+              ✨ تنويه: الحساب خالٍ تماماً من أي مديونيات سابقة أو متأخرات.
+            </div>
+          )}
+
+          {/* Polite message */}
+          <div
+            style={{
+              backgroundColor: financials.currentMonthStatus === 'مسدد' ? '#f0fdf4' : '#eff6ff',
+              border: `1px solid ${financials.currentMonthStatus === 'مسدد' ? '#bbf7d0' : '#bfdbfe'}`,
+              color: financials.currentMonthStatus === 'مسدد' ? '#166534' : '#1e40af',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: '16px',
+              fontSize: '11.5px',
+              fontWeight: '700',
+              textAlign: 'center',
+              lineHeight: 1.6,
+            }}
+          >
+            {financials.currentMonthStatus === 'مسدد'
+              ? '🌺 نشكركم جزيل الشكر والتقدير على حرصكم الدائم وسدادكم المنتظم، مما يساهم مباشرةً في الحفاظ على العمارة وتطوير خدماتها لراحة الجميع.'
+              : '🤝 نأمل من سيادتكم التكرم بالمبادرة بسداد المستحقات في أقرب وقت لضمان استمرار خدمات النظافة، الحراسة، الصيانة، وتشغيل المصاعد بكفاءة لراحة جميع السكّان.'}
+          </div>
+
+          {/* Total Amount Box */}
+          <div
+            style={{
+              backgroundColor: financials.currentMonthStatus === 'مسدد' ? '#ecfdf5' : '#fff1f2',
+              border: `2px solid ${financials.currentMonthStatus === 'مسدد' ? '#059669' : '#e11d48'}`,
+              borderRadius: '10px',
+              padding: '12px 18px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px',
+            }}
+          >
+            <span style={{ fontSize: '13px', fontWeight: '900', color: '#0f172a' }}>
+              {financials.currentMonthStatus === 'مسدد' ? 'إجمالي المبلغ المسدد معتمداً:' : 'إجمالي المبلغ المستحق للسداد:'}
+            </span>
+            <span
+              style={{
+                fontSize: '18px',
+                fontWeight: '900',
+                color: financials.currentMonthStatus === 'مسدد' ? '#047857' : '#be123c',
+              }}
+            >
+              {financials.currentMonthStatus === 'مسدد'
+                ? `${(financials.currentMonthPayment?.amount || financials.monthlyFee).toLocaleString()} ج.م`
+                : `${(financials.monthlyFee + financials.oldDebtVal).toLocaleString()} ج.م`}
+            </span>
+          </div>
+
+          {/* Official Seal / Footer */}
+          <div
+            style={{
+              borderTop: '1px dashed #cbd5e1',
+              paddingTop: '12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '10.5px',
+              color: '#64748b',
+              fontWeight: '700',
+            }}
+          >
+            <span>تم استخراج هذا الإيصال إلكترونياً ومطابق للسجلات المالية الرسمية</span>
+            <span
+              style={{
+                padding: '2px 8px',
+                border: '1px solid #94a3b8',
+                borderRadius: '4px',
+                color: '#334155',
+                fontWeight: '900',
+              }}
+            >
+              معتمد إلكترونياً ✓ اتحاد ملاك بيراميدز فيو ١
+            </span>
           </div>
         </div>
       )}

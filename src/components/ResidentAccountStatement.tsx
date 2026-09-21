@@ -1059,10 +1059,10 @@ export const ResidentAccountStatement: React.FC<ResidentAccountStatementProps> =
               <div><span className="font-bold text-slate-500">رقم الوحدة:</span> <strong className="text-slate-900">شقة / وحدة ({activeResident.flatNumber})</strong></div>
               <div><span className="font-bold text-slate-500">اسم المالك:</span> <strong className="text-slate-900">{activeResident.name}</strong></div>
               <div><span className="font-bold text-slate-500">نوع النشاط:</span> <strong className="text-slate-900">{activeResident.activityType}</strong></div>
-              <div><span className="font-bold text-slate-500">رقم هاتف المالك:</span> <strong className="text-slate-900" dir="ltr">{activeResident.phone ? formatMobileNumber(activeResident.phone) : '—'}</strong></div>
+              <div><span className="font-bold text-slate-500">رقم هاتف المالك:</span> <strong className="text-slate-900 font-mono" dir="ltr">{activeResident.phone ? formatMobileNumber(activeResident.phone) : '—'}</strong></div>
               <div><span className="font-bold text-slate-500">نوع الملكية:</span> <strong className="text-slate-900">{activeResident.ownershipType || 'تمليك'}</strong></div>
               {activeResident.tenantName && (
-                <div><span className="font-bold text-slate-500">اسم المستأجر:</span> <strong className="text-slate-900">{activeResident.tenantName} {activeResident.tenantPhone ? `(${formatMobileNumber(activeResident.tenantPhone)})` : ''}</strong></div>
+                <div><span className="font-bold text-slate-500">اسم المستأجر:</span> <strong className="text-slate-900">{activeResident.tenantName} {activeResident.tenantPhone ? <span dir="ltr" className="font-mono text-slate-700 font-bold">({formatMobileNumber(activeResident.tenantPhone)})</span> : ''}</strong></div>
               )}
             </div>
           </div>
