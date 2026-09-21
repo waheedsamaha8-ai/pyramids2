@@ -363,7 +363,7 @@ export const ResidentsList: React.FC<ResidentsListProps> = ({
       : (resident.password || `pyr${resident.flatNumber}#2026`);
 
     const cleanPhone = rawPhone ? formatMobileNumber(rawPhone).replace(/[^\d+]/g, '') : '';
-    const appUrl = window.location.origin;
+    const appUrl = 'https://waheedsamaha8-ai.github.io/pyramids2/';
 
     const message = `مرحباً بك أستاذ/ة ${recipientName} 👋
 
