@@ -19,8 +19,10 @@ export interface ShareImageResult {
 
 /**
  * Shares an image directly to WhatsApp using:
- * 1. Native Web Share API with File (Mobile / supported OS - directly attaches image in WhatsApp)
- * 2. Fallback: Copies image to clipboard + downloads image file + opens WhatsApp chat directly with the phone number
+ * 1. Copies image to clipboard (for instant paste in WhatsApp)
+ * 2. Downloads the PNG image to user's device
+ * 3. Opens WhatsApp directly to the recipient's phone number with prefilled message
+ * Note: NEVER uses window.location.href inside iframes to prevent X-Frame-Options crashes.
  */
 export async function shareImageViaWhatsApp(options: ShareImageOptions): Promise<ShareImageResult> {
   const {
@@ -37,29 +39,7 @@ export async function shareImageViaWhatsApp(options: ShareImageOptions): Promise
   const cleanPhone = toWhatsAppNumber(phone);
   const targetLabel = recipientName ? `(${recipientName})` : (phone ? `(${phone})` : '');
 
-  // 1. Prepare File for Native Sharing
-  const file = new File([imageBlob], fileName, { type: 'image/png' });
-
-  // 2. Try Native Web Share API with File (Supported on Mobile Chrome, Safari, Android, iOS)
-  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: title,
-        text: text,
-      });
-      const msg = `تم فتح تطبيق الواتساب لمشاركة الصورة بنجاح ${targetLabel}`;
-      onSuccessToast?.(msg);
-      return { success: true, method: 'native', message: msg };
-    } catch (shareErr: any) {
-      if (shareErr?.name === 'AbortError') {
-        return { success: false, method: 'cancelled', message: 'تم إلغاء المشاركة' };
-      }
-      console.warn('Native file share error, proceeding to desktop clipboard fallback:', shareErr);
-    }
-  }
-
-  // 3. Fallback: Copy image to Clipboard + Download PNG + Open WhatsApp URL
+  // 1. Copy image to Clipboard if supported
   let copiedToClipboard = false;
   if (typeof navigator !== 'undefined' && navigator.clipboard && window.ClipboardItem) {
     try {
@@ -72,41 +52,53 @@ export async function shareImageViaWhatsApp(options: ShareImageOptions): Promise
     }
   }
 
-  // Download image file to device
+  // 2. Download image file to user device
   try {
     const blobUrl = URL.createObjectURL(imageBlob);
     const link = document.createElement('a');
     link.href = blobUrl;
     link.download = fileName;
+    link.rel = 'noopener noreferrer';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
   } catch (dlErr) {
     console.warn('Direct file download error:', dlErr);
   }
 
-  // Open WhatsApp
-  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  let waUrl = '';
-  if (cleanPhone) {
-    waUrl = isMobile
-      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
-      : `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
-  } else {
-    waUrl = isMobile
-      ? `https://wa.me/?text=${encodeURIComponent(text)}`
-      : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+  // 3. Construct direct WhatsApp link using universal API endpoint
+  const waUrl = cleanPhone
+    ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+  // 4. Safely trigger link opening in a new tab/window without modifying iframe window.location
+  let openedDirectly = false;
+  try {
+    const waLink = document.createElement('a');
+    waLink.href = waUrl;
+    waLink.target = '_blank';
+    waLink.rel = 'noopener noreferrer';
+    document.body.appendChild(waLink);
+    waLink.click();
+    document.body.removeChild(waLink);
+    openedDirectly = true;
+  } catch (openErr) {
+    console.warn('Anchor click error, attempting window.open:', openErr);
   }
 
-  const win = window.open(waUrl, '_blank');
-  if (!win || win.closed || typeof win.closed === 'undefined') {
-    window.location.href = waUrl;
+  if (!openedDirectly) {
+    try {
+      const win = window.open(waUrl, '_blank', 'noopener,noreferrer');
+      if (win) openedDirectly = true;
+    } catch (winErr) {
+      console.warn('window.open blocked:', winErr);
+    }
   }
 
   const statusMsg = copiedToClipboard
-    ? `تم نسخ الصورة للحافظة وتحميلها لجهازك، وجاري فتح محادثة الواتساب ${targetLabel} — اضغط (لصق / Ctrl+V) في الشات لإرسال الصورة فوراً!`
-    : `تم تحميل الصورة لجهازك وفتح محادثة الواتساب ${targetLabel} — يمكنك إرفاق الصورة المحفوظة في الشات الآن.`;
+    ? `تم نسخ الصورة للحافظة وتحميلها، وفتح محادثة الواتساب مباشرة ${targetLabel} — اضغط (لصق / Ctrl+V) في الشات لإرسال الصورة فوراً!`
+    : `تم تحميل الصورة لجهازك وفتح محادثة الواتساب مباشرة ${targetLabel} — يمكنك إرفاق الصورة في الشات الآن.`;
 
   onSuccessToast?.(statusMsg);
   return {

@@ -22,7 +22,8 @@ import {
   Image as ImageIcon,
   Loader2,
   Share2,
-  CheckCircle2
+  CheckCircle2,
+  Download
 } from 'lucide-react';
 import { deriveFloorConfigsFromResidents, getUnitNumbersForFloor, compareFlatNumbers, isSameFlatNumber } from '../utils/buildingStructure';
 import { calculateResidentFinancials, getCarriedPreviousBalance } from '../utils/financialCalculations';
@@ -51,6 +52,17 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
   const [copiedReceipt, setCopiedReceipt] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [sharedReceiptModal, setSharedReceiptModal] = useState<{
+    imageBlob: Blob;
+    imageDataUrl: string;
+    fileName: string;
+    title: string;
+    recipientName: string;
+    recipientPhone: string;
+    msgText: string;
+    isPaid: boolean;
+  } | null>(null);
+  const [modalCopiedImage, setModalCopiedImage] = useState(false);
 
   const receiptCardRef = useRef<HTMLDivElement>(null);
   
@@ -245,9 +257,16 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         return;
       }
       const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(text)}`;
-      const win = window.open(url, '_blank');
-      if (!win || win.closed || typeof win.closed === 'undefined') {
-        window.location.href = url;
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch {
+        window.open(url, '_blank', 'noopener,noreferrer');
       }
     };
 
@@ -489,13 +508,26 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         ? `إيصال_سداد_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`
         : `إشعار_مطالبة_شقة_${flatNum}_شهر_${selectedMonth}_${currentYear}.png`;
 
-      const targetPhone = target === 'owner' 
+      let targetPhone = target === 'owner' 
         ? (financials.resident.phone || financials.resident.tenantPhone)
         : (financials.resident.tenantPhone || financials.resident.phone);
       
       const targetName = target === 'owner'
         ? financials.resident.name
         : (financials.resident.tenantName || 'المستأجر');
+
+      if (!targetPhone || !targetPhone.trim()) {
+        const userEntered = window.prompt(
+          `رقم هاتف الوحدة (${targetName}) غير مسجل بالنظام.\nيرجى إدخال رقم الواتساب لإرسال الصورة إليه مباشرة (مثال: 01007911777):`
+        );
+        if (userEntered && userEntered.trim()) {
+          targetPhone = userEntered.trim();
+        } else {
+          alert('يرجى إدخال رقم هاتف صالح للوحدة لتتمكن من مشاركة الصورة عبر الواتساب مباشرة.');
+          setIsGeneratingImage(false);
+          return;
+        }
+      }
 
       const receiptNum = isPaid
         ? (financials.currentMonthPayment?.receiptNumber ? `#${financials.currentMonthPayment.receiptNumber}` : `REC-${financials.resident.flatNumber}-${selectedMonth}${currentYear}`)
@@ -516,6 +548,8 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         return;
       }
 
+      const dataUrl = canvas.toDataURL('image/png');
+
       await shareImageViaWhatsApp({
         imageBlob: blob,
         fileName,
@@ -530,6 +564,17 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
         onErrorToast: (err) => {
           alert(err);
         }
+      });
+
+      setSharedReceiptModal({
+        imageBlob: blob,
+        imageDataUrl: dataUrl,
+        fileName,
+        title: isPaid ? `إيصال سداد شقة ${flatNum}` : `إشعار مطالبة شقة ${flatNum}`,
+        recipientName: targetName,
+        recipientPhone: targetPhone,
+        msgText,
+        isPaid,
       });
     } catch (err) {
       console.error('Error generating and sharing canvas image:', err);
@@ -920,16 +965,16 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                           type="button"
                           disabled={isGeneratingImage}
                           onClick={() => handleCaptureAndShareImage('owner')}
-                          className="py-2 px-1 bg-blue-900 hover:bg-blue-950 text-white rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50 text-center active:scale-95"
+                          className="py-2 px-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50 text-center active:scale-95"
                           title={financials.currentMonthStatus === 'مسدد' ? 'توليد صورة الإيصال ومشاركتها مباشرة على واتساب الوحدة' : 'توليد صورة إشعار المطالبة ومشاركتها مباشرة على واتساب الوحدة'}
                         >
                           {isGeneratingImage ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-white" />
                           ) : (
-                            <Share2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                            <Share2 className="w-3.5 h-3.5 shrink-0 text-emerald-200" />
                           )}
                           <span className="truncate">
-                            {financials.currentMonthStatus === 'مسدد' ? 'توليد صورة إيصال' : 'توليد صورة إشعار'}
+                            {financials.currentMonthStatus === 'مسدد' ? 'توليد صورة الإيصال' : 'توليد صورة إشعار المطالبة'}
                           </span>
                         </button>
 
@@ -1021,6 +1066,144 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
                 className="w-full py-2.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-black text-xs transition shadow-2xs cursor-pointer active:scale-95 flex items-center justify-center gap-1"
               >
                 إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Direct WhatsApp Share & Receipt Image Preview Modal */}
+      {sharedReceiptModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 text-right flex flex-col max-h-[92vh] my-auto">
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white ${sharedReceiptModal.isPaid ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white">{sharedReceiptModal.title}</h3>
+                  <span className="text-[10px] text-slate-300 font-bold block">
+                    المستلم: {sharedReceiptModal.recipientName} ({sharedReceiptModal.recipientPhone})
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSharedReceiptModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+                title="إغلاق"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Success Toast / Instruction Banner */}
+            <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2 shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="flex-1 leading-snug">
+                تم تجهيز وفتح محادثة الواتساب مباشرة لرقم <span className="font-black underline">{sharedReceiptModal.recipientPhone}</span> كما تم نسخ الصورة للحافظة وتحميلها. اضغط <span className="underline font-black">لصق (Ctrl+V)</span> داخل الشات لإرسال الصورة فوراً!
+              </div>
+            </div>
+
+            {/* High-Resolution Image Preview */}
+            <div className="p-4 overflow-y-auto max-h-[60vh] bg-slate-100/70 flex justify-center items-center">
+              <img
+                src={sharedReceiptModal.imageDataUrl}
+                alt={sharedReceiptModal.title}
+                className="w-full max-w-md h-auto rounded-2xl border border-slate-200 shadow-md object-contain bg-white"
+              />
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="p-3 bg-white border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const fullPhone = toWhatsAppNumber(sharedReceiptModal.recipientPhone);
+                  const waUrl = fullPhone 
+                    ? `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(sharedReceiptModal.msgText)}`
+                    : `https://api.whatsapp.com/send?text=${encodeURIComponent(sharedReceiptModal.msgText)}`;
+                  try {
+                    const link = document.createElement('a');
+                    link.href = waUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } catch {
+                    window.open(waUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs text-center active:scale-95"
+                title="إعادة فتح محادثة الواتساب"
+              >
+                <Send className="w-3.5 h-3.5 shrink-0" />
+                <span>فتح الواتساب</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const blobUrl = URL.createObjectURL(sharedReceiptModal.imageBlob);
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = sharedReceiptModal.fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+                  } catch (err) {
+                    console.error('Download error:', err);
+                  }
+                }}
+                className="py-2.5 px-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs text-center active:scale-95"
+                title="تحميل ملف الصورة لجهازك"
+              >
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span>تحميل الصورة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    if (navigator.clipboard && window.ClipboardItem) {
+                      await navigator.clipboard.write([
+                        new ClipboardItem({ 'image/png': sharedReceiptModal.imageBlob })
+                      ]);
+                      setModalCopiedImage(true);
+                      setTimeout(() => setModalCopiedImage(false), 3000);
+                    }
+                  } catch (clipErr) {
+                    console.error('Clipboard error:', clipErr);
+                  }
+                }}
+                className="py-2.5 px-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs text-center active:scale-95"
+                title="نسخ الصورة للحافظة للصقها في الشات"
+              >
+                {modalCopiedImage ? (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>تم النسخ ✓</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                    <span>نسخ الصورة</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSharedReceiptModal(null)}
+                className="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs text-center active:scale-95"
+              >
+                <span>إغلاق</span>
               </button>
             </div>
           </div>
