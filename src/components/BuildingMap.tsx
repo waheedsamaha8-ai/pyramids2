@@ -494,6 +494,8 @@ export const BuildingMap: React.FC<BuildingMapProps> = ({
   const handleCaptureAndShareImage = async (target: 'owner' | 'tenant' = 'owner') => {
     if (!financials) return;
     setIsGeneratingImage(true);
+    // Yield execution tick to render spinner immediately on UI
+    await new Promise((resolve) => setTimeout(resolve, 15));
 
     try {
       const flatNum = financials.resident.flatNumber;
