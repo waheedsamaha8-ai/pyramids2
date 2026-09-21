@@ -162,31 +162,31 @@ function applyActionToLocalCache(type: OfflineAction['type'], payload: any) {
       break;
     }
     case 'ADD_CHAT_MESSAGE': {
-      const list = getCachedData<any[]>('messages') || [];
+      const list = getCachedData<any[]>('chat_messages') || [];
       list.push(payload);
-      saveCachedData('messages', list);
+      saveCachedData('chat_messages', list);
       break;
     }
     case 'SET_ALL_CHAT': {
-      saveCachedData('messages', payload);
+      saveCachedData('chat_messages', payload);
       break;
     }
     case 'ADD_DECISION': {
-      const list = getCachedData<any[]>('decisions') || [];
+      const list = getCachedData<any[]>('admin_decisions') || [];
       list.push(payload);
-      saveCachedData('decisions', list);
+      saveCachedData('admin_decisions', list);
       break;
     }
     case 'EDIT_DECISION': {
-      let list = getCachedData<any[]>('decisions') || [];
+      let list = getCachedData<any[]>('admin_decisions') || [];
       list = list.map(item => item.id === payload.id ? payload : item);
-      saveCachedData('decisions', list);
+      saveCachedData('admin_decisions', list);
       break;
     }
     case 'DELETE_DECISION': {
-      let list = getCachedData<any[]>('decisions') || [];
+      let list = getCachedData<any[]>('admin_decisions') || [];
       list = list.filter(item => item.id !== payload.id);
-      saveCachedData('decisions', list);
+      saveCachedData('admin_decisions', list);
       break;
     }
     case 'ADD_POLL': {
@@ -208,21 +208,21 @@ function applyActionToLocalCache(type: OfflineAction['type'], payload: any) {
       break;
     }
     case 'ADD_COMPLAINT': {
-      const list = getCachedData<any[]>('complaints') || [];
-      list.push(payload);
-      saveCachedData('complaints', list);
+      const list = getCachedData<any[]>('public_complaints') || [];
+      list.unshift(payload);
+      saveCachedData('public_complaints', list);
       break;
     }
     case 'EDIT_COMPLAINT': {
-      let list = getCachedData<any[]>('complaints') || [];
+      let list = getCachedData<any[]>('public_complaints') || [];
       list = list.map(item => item.id === payload.id ? payload : item);
-      saveCachedData('complaints', list);
+      saveCachedData('public_complaints', list);
       break;
     }
     case 'DELETE_COMPLAINT': {
-      let list = getCachedData<any[]>('complaints') || [];
+      let list = getCachedData<any[]>('public_complaints') || [];
       list = list.filter(item => item.id !== payload.id);
-      saveCachedData('complaints', list);
+      saveCachedData('public_complaints', list);
       break;
     }
     case 'ADD_MAINTENANCE': {
@@ -264,14 +264,47 @@ function applyActionToLocalCache(type: OfflineAction['type'], payload: any) {
   }
 }
 
-// Standard getters and setters for local cache
+function normalizeKeyAliases(key: string): string[] {
+  if (key === 'chat_messages' || key === 'messages') return ['chat_messages', 'messages'];
+  if (key === 'public_complaints' || key === 'complaints') return ['public_complaints', 'complaints'];
+  if (key === 'admin_decisions' || key === 'decisions') return ['admin_decisions', 'decisions'];
+  return [key];
+}
+
+// Standard getters and setters for local cache with automatic key alias synchronization
 export function getCachedData<T>(key: string): T | null {
-  const json = localStorage.getItem(`cache_${key}`);
-  return json ? JSON.parse(json) : null;
+  const keys = normalizeKeyAliases(key);
+  for (const k of keys) {
+    const json = localStorage.getItem(`cache_${k}`);
+    if (json) {
+      try {
+        return JSON.parse(json);
+      } catch {
+        // continue
+      }
+    }
+  }
+  return null;
 }
 
 export function saveCachedData(key: string, data: any) {
-  localStorage.setItem(`cache_${key}`, JSON.stringify(data));
+  const keys = normalizeKeyAliases(key);
+  for (const k of keys) {
+    localStorage.setItem(`cache_${k}`, JSON.stringify(data));
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pyramids_cache_updated', { detail: { key, keys, data } }));
+    try {
+      if ('BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('pyramids_channel_sync');
+        bc.postMessage({ type: 'CACHE_UPDATED', key, keys, data });
+        bc.close();
+      }
+    } catch {
+      // BroadcastChannel unavailable
+    }
+  }
 }
 
 // Proactively clear resident-related actions from the queue (e.g. when replacing all residents)

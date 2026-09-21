@@ -59,18 +59,20 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
   communityCounts,
 }) => {
   // Main section tabs: 'polls' | 'decisions'
-  const [activeTab, setActiveTab] = useState<'polls' | 'decisions'>(defaultSubTab);
+  const [activeTab, setActiveTab] = useState<'polls' | 'decisions'>(role === 'ASSISTANT' ? 'decisions' : defaultSubTab);
 
   React.useEffect(() => {
-    if (defaultSubTab) {
+    if (role === 'ASSISTANT') {
+      setActiveTab('decisions');
+    } else if (defaultSubTab) {
       setActiveTab(defaultSubTab);
     }
-  }, [defaultSubTab]);
+  }, [defaultSubTab, role]);
 
   const handleNavigateService = (srv: CommunityServiceId) => {
-    if (srv === 'polls') {
+    if (srv === 'polls' && role !== 'ASSISTANT') {
       setActiveTab('polls');
-    } else if (srv === 'decisions') {
+    } else if (srv === 'decisions' || (srv === 'polls' && role === 'ASSISTANT')) {
       setActiveTab('decisions');
     } else if (onNavigateCommunity) {
       onNavigateCommunity(srv);
@@ -275,16 +277,16 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
     <div className="w-full space-y-2.5 text-right animate-fade-in" id="polls-panel" dir="rtl">
       {/* 1. Unified Community Hub Header */}
       <CommunityHeader
-        activeService={activeTab === 'polls' ? 'polls' : 'decisions'}
+        activeService={activeTab === 'polls' && role !== 'ASSISTANT' ? 'polls' : 'decisions'}
         onNavigateService={handleNavigateService}
-        title={activeTab === 'polls' ? 'نظام التصويت واستبيان الملاك' : 'سجل القرارات واللوائح الإدارية'}
+        title={activeTab === 'polls' && role !== 'ASSISTANT' ? 'نظام التصويت واستبيان الملاك' : 'سجل القرارات واللوائح الإدارية'}
         description={
-          activeTab === 'polls'
+          activeTab === 'polls' && role !== 'ASSISTANT'
             ? 'شارك برأيك في استبيانات ومقترحات عمارة بيراميدز فيو ١ بشفافية وديمقراطية لاتخاذ القرارات المشتركة.'
             : 'القرارات الرسمية المعتمدة الصادرة عن اتحاد الملاك والإدارة لتنظيم شؤون العمارة وحقوق وواجبات السكان.'
         }
-        icon={activeTab === 'polls' ? <Vote className="w-4 h-4" /> : <Scale className="w-4 h-4" />}
-        badge={activeTab === 'polls' ? `${polls.length} استبيان` : `${decisions.length} قرار`}
+        icon={activeTab === 'polls' && role !== 'ASSISTANT' ? <Vote className="w-4 h-4" /> : <Scale className="w-4 h-4" />}
+        badge={activeTab === 'polls' && role !== 'ASSISTANT' ? `${polls.length} استبيان` : `${decisions.length} قرار`}
         counts={communityCounts || {
           polls: polls.length,
           decisions: decisions.length,
@@ -321,21 +323,23 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
 
       {/* 2. Subtabs Switcher (Polls vs Decisions) */}
       <div className="flex items-center gap-1 p-0.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/80 rounded-lg w-fit">
-        <button
-          type="button"
-          onClick={() => setActiveTab('polls')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
-            activeTab === 'polls'
-              ? 'bg-blue-900 text-white shadow-2xs'
-              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          <Vote className="w-3.5 h-3.5" />
-          <span>استبيان وتصويت الملاك</span>
-          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeTab === 'polls' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
-            {polls.length}
-          </span>
-        </button>
+        {role !== 'ASSISTANT' && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('polls')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer ${
+              activeTab === 'polls'
+                ? 'bg-blue-900 text-white shadow-2xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
+            }`}
+          >
+            <Vote className="w-3.5 h-3.5" />
+            <span>استبيان وتصويت الملاك</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${activeTab === 'polls' ? 'bg-blue-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+              {polls.length}
+            </span>
+          </button>
+        )}
 
         <button
           type="button"
@@ -357,7 +361,7 @@ export const VotingPolls: React.FC<VotingPollsProps> = ({
       {/* ========================================================================= */}
       {/* 1. SECTION: POLLS & VOTING */}
       {/* ========================================================================= */}
-      {activeTab === 'polls' && (
+      {activeTab === 'polls' && role !== 'ASSISTANT' && (
         <div className="space-y-3">
 
           {/* Add Poll Form (Admins / Managers only) */}

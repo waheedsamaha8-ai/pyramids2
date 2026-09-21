@@ -785,12 +785,78 @@ export default function App() {
       setPwaInstalled(true);
     }
 
+    // Real-time local cache update listener across tabs and role view switches
+    const handleSyncEvent = (e: any) => {
+      const detailKey = e?.detail?.key || e?.key || '';
+      
+      if (!detailKey || detailKey.includes('chat_messages') || detailKey.includes('messages')) {
+        const raw = offlineSync.getCachedData<ChatMessage[]>('chat_messages');
+        if (raw && Array.isArray(raw)) setMessages(raw.filter(m => !m.id.startsWith('msg_seed_')));
+      }
+      if (!detailKey || detailKey.includes('public_complaints') || detailKey.includes('complaints')) {
+        const raw = offlineSync.getCachedData<PublicComplaint[]>('public_complaints');
+        if (raw && Array.isArray(raw)) setComplaints(raw.filter(c => !c.id.startsWith('comp_seed_')));
+      }
+      if (!detailKey || detailKey.includes('maintenance')) {
+        const raw = offlineSync.getCachedData<MaintenanceRequest[]>('maintenance');
+        if (raw && Array.isArray(raw)) setMaintenanceRequests(raw.filter(m => !m.id.startsWith('req_seed_')));
+      }
+      if (!detailKey || detailKey.includes('polls')) {
+        const raw = offlineSync.getCachedData<Poll[]>('polls');
+        if (raw && Array.isArray(raw)) setPolls(raw.filter(p => !p.id.startsWith('poll_seed_')));
+      }
+      if (!detailKey || detailKey.includes('admin_decisions') || detailKey.includes('decisions')) {
+        const raw = offlineSync.getCachedData<AdminDecision[]>('admin_decisions');
+        if (raw && Array.isArray(raw)) setDecisions(raw.filter(d => !d.id.startsWith('dec_seed_')));
+      }
+      if (!detailKey || detailKey.includes('events')) {
+        const raw = offlineSync.getCachedData<BuildingEvent[]>('events');
+        if (raw && Array.isArray(raw)) setEvents(raw.filter(ev => !ev.id.startsWith('ev_seed_')));
+      }
+      if (!detailKey || detailKey.includes('craftsmen')) {
+        const raw = offlineSync.getCachedData<Craftsman[]>('craftsmen');
+        if (raw && Array.isArray(raw)) setCraftsmen(raw);
+      }
+      if (!detailKey || detailKey.includes('residents')) {
+        const raw = offlineSync.getCachedData<Resident[]>('residents');
+        if (raw && Array.isArray(raw)) setResidents(raw);
+      }
+      if (!detailKey || detailKey.includes('payments')) {
+        const raw = offlineSync.getCachedData<Payment[]>('payments');
+        if (raw && Array.isArray(raw)) setPayments(raw);
+      }
+      if (!detailKey || detailKey.includes('expenses')) {
+        const raw = offlineSync.getCachedData<Expense[]>('expenses');
+        if (raw && Array.isArray(raw)) setExpenses(raw);
+      }
+    };
+
+    window.addEventListener('pyramids_cache_updated', handleSyncEvent);
+    window.addEventListener('storage', handleSyncEvent);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if ('BroadcastChannel' in window) {
+        bc = new BroadcastChannel('pyramids_channel_sync');
+        bc.onmessage = (event) => {
+          if (event?.data?.type === 'CACHE_UPDATED') {
+            handleSyncEvent({ detail: { key: event.data.key } });
+          }
+        };
+      }
+    } catch {
+      // BroadcastChannel unsupported
+    }
+
     return () => {
       unsubscribe();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('google-auth-error', handleGoogleAuthError);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('pyramids_cache_updated', handleSyncEvent);
+      window.removeEventListener('storage', handleSyncEvent);
+      if (bc) bc.close();
     };
   }, []);
 
@@ -2746,10 +2812,10 @@ export default function App() {
                         طلبات الصيانة وفنيي الصيانة
                       </button>
                       <button
-                        onClick={() => { setActiveTab('polls'); setMenuOpen(false); }}
+                        onClick={() => { setPollsSubTab(role === 'ASSISTANT' ? 'decisions' : 'polls'); setActiveTab('polls'); setMenuOpen(false); }}
                         className={`w-full py-2 px-3 rounded-lg text-xs font-bold text-right transition cursor-pointer ${activeTab === 'polls' ? 'bg-blue-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
                       >
-                        القرارات والتصويت
+                        {role === 'ASSISTANT' ? 'سجل القرارات الإدارية واللوائح' : 'القرارات والتصويت'}
                       </button>
                       <button
                         onClick={() => { setActiveTab('calendar'); setMenuOpen(false); }}
